@@ -39,6 +39,14 @@ _TERMINAL_STATES: set[str] = {
 T = TypeVar("T")
 
 
+def _load_kernel32():
+    return ctypes.__dict__["WinDLL"]("kernel32", use_last_error=True)
+
+
+def _get_last_error() -> int:
+    return int(ctypes.__dict__["get_last_error"]())
+
+
 def _utc_now() -> str:
     return datetime.now(UTC).isoformat()
 
@@ -69,7 +77,7 @@ class WindowsJob:
 
         from ctypes import wintypes
 
-        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel32 = _load_kernel32()
         kernel32.CreateJobObjectW.argtypes = [ctypes.c_void_p, ctypes.c_wchar_p]
         kernel32.CreateJobObjectW.restype = ctypes.c_void_p
         kernel32.SetInformationJobObject.argtypes = [ctypes.c_void_p, ctypes.c_int, ctypes.c_void_p, wintypes.DWORD]
@@ -78,7 +86,7 @@ class WindowsJob:
         kernel32.CloseHandle.restype = wintypes.BOOL
         handle = kernel32.CreateJobObjectW(None, None)
         if not handle:
-            raise OSError(ctypes.get_last_error(), "CreateJobObjectW failed")
+            raise OSError(_get_last_error(), "CreateJobObjectW failed")
 
         class IO_COUNTERS(ctypes.Structure):
             _fields_ = [
@@ -122,7 +130,7 @@ class WindowsJob:
             ctypes.sizeof(info),
         )
         if not ok:
-            error = ctypes.get_last_error()
+            error = _get_last_error()
             kernel32.CloseHandle(ctypes.c_void_p(handle))
             raise OSError(error, "SetInformationJobObject failed")
         self.handle = int(handle)
@@ -131,7 +139,7 @@ class WindowsJob:
         if os.name != "nt" or self.handle is None:
             self.assigned = True
             return
-        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel32 = _load_kernel32()
         kernel32.OpenProcess.argtypes = [ctypes.c_uint32, ctypes.c_bool, ctypes.c_uint32]
         kernel32.OpenProcess.restype = ctypes.c_void_p
         kernel32.AssignProcessToJobObject.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
@@ -139,10 +147,10 @@ class WindowsJob:
         kernel32.CloseHandle.argtypes = [ctypes.c_void_p]
         process = kernel32.OpenProcess(0x0100 | 0x0001 | 0x0400, False, pid)
         if not process:
-            raise OSError(ctypes.get_last_error(), "OpenProcess failed")
+            raise OSError(_get_last_error(), "OpenProcess failed")
         try:
             if not kernel32.AssignProcessToJobObject(ctypes.c_void_p(self.handle), process):
-                raise OSError(ctypes.get_last_error(), "AssignProcessToJobObject failed")
+                raise OSError(_get_last_error(), "AssignProcessToJobObject failed")
             self.assigned = True
         finally:
             kernel32.CloseHandle(process)
@@ -150,14 +158,14 @@ class WindowsJob:
     def terminate(self, exit_code: int = 1) -> None:
         if os.name != "nt" or self.handle is None:
             return
-        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel32 = _load_kernel32()
         kernel32.TerminateJobObject.argtypes = [ctypes.c_void_p, ctypes.c_uint32]
         kernel32.TerminateJobObject.restype = ctypes.c_bool
         kernel32.TerminateJobObject(ctypes.c_void_p(self.handle), exit_code)
 
     def close(self) -> None:
         if os.name == "nt" and self.handle is not None:
-            kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+            kernel32 = _load_kernel32()
             kernel32.CloseHandle.argtypes = [ctypes.c_void_p]
             kernel32.CloseHandle(ctypes.c_void_p(self.handle))
             self.handle = None
@@ -618,7 +626,7 @@ class WorkspaceOperationManager:
             "-Command",
             effective_script,
         ]
-        creationflags = subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0
+        creationflags = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0) if os.name == "nt" else 0
         preexec_fn = getattr(os, "setsid", None) if os.name != "nt" else None
         process_env = sanitized_environment()
         process_env["GATEWAY_JOB_READY_FILE"] = str(ready_path)

@@ -10,6 +10,14 @@ _mutex_handle: int | None = None
 _mutex_lock = threading.Lock()
 
 
+def _load_kernel32():
+    return ctypes.__dict__["WinDLL"]("kernel32", use_last_error=True)
+
+
+def _get_last_error() -> int:
+    return int(ctypes.__dict__["get_last_error"]())
+
+
 def _is_windows() -> bool:
     return os.name == "nt"
 
@@ -21,15 +29,15 @@ def acquire_single_instance() -> None:
     with _mutex_lock:
         if _mutex_handle is not None:
             return
-        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel32 = _load_kernel32()
         kernel32.CreateMutexW.argtypes = [ctypes.c_void_p, ctypes.c_bool, ctypes.c_wchar_p]
         kernel32.CreateMutexW.restype = ctypes.c_void_p
         kernel32.CloseHandle.argtypes = [ctypes.c_void_p]
         kernel32.CloseHandle.restype = ctypes.c_bool
         handle = kernel32.CreateMutexW(None, False, "Global\\GeminiSparkGitHubMcpGateway")
         if not handle:
-            raise OSError(ctypes.get_last_error(), "CreateMutexW failed")
-        if ctypes.get_last_error() == 183:  # ERROR_ALREADY_EXISTS
+            raise OSError(_get_last_error(), "CreateMutexW failed")
+        if _get_last_error() == 183:  # ERROR_ALREADY_EXISTS
             kernel32.CloseHandle(ctypes.c_void_p(handle))
             raise ApiError(
                 "GATEWAY_INSTANCE_ALREADY_RUNNING",
@@ -47,7 +55,7 @@ def release_single_instance() -> None:
     with _mutex_lock:
         if _mutex_handle is None:
             return
-        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel32 = _load_kernel32()
         kernel32.CloseHandle.argtypes = [ctypes.c_void_p]
         kernel32.CloseHandle(ctypes.c_void_p(_mutex_handle))
         _mutex_handle = None
