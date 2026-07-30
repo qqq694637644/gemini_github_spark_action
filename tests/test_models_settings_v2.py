@@ -34,6 +34,57 @@ def test_default_read_branch_allowlist_allows_all_refs(tmp_path):
     assert settings.read_branch_patterns == ["*"]
 
 
+def test_oauth_settings_derive_the_mcp_resource_and_scope_lists(tmp_path):
+    settings = make_settings(
+        tmp_path,
+        public_base_url="https://gateway.example.com/root/",
+        mcp_path="/mcp/",
+        mcp_auth_mode="oauth",
+        mcp_oauth_issuer_url="https://id.example.com",
+        mcp_oauth_required_scopes="github:read, github:write",
+        mcp_oauth_algorithms="RS256,ES256",
+    )
+
+    assert settings.mcp_path == "/mcp"
+    assert settings.mcp_resource_url == "https://gateway.example.com/mcp"
+    assert settings.oauth_audience == "https://gateway.example.com/mcp"
+    assert settings.oauth_required_scope_list == ["github:read", "github:write"]
+    assert settings.oauth_algorithm_list == ["RS256", "ES256"]
+
+
+def test_production_auth_configuration_requires_https_and_credentials(tmp_path):
+    with pytest.raises(ValidationError):
+        make_settings(tmp_path, app_env="production", public_base_url="http://gateway.example.com")
+
+    with pytest.raises(ValidationError):
+        make_settings(
+            tmp_path,
+            app_env="production",
+            public_base_url="https://gateway.example.com",
+            mcp_auth_mode="static_bearer",
+            gateway_action_secret="",
+        )
+
+    with pytest.raises(ValidationError):
+        make_settings(
+            tmp_path,
+            app_env="production",
+            public_base_url="https://gateway.example.com",
+            mcp_auth_mode="oauth",
+            mcp_oauth_issuer_url="http://id.example.com",
+        )
+
+
+def test_oauth_settings_reject_symmetric_access_token_algorithms(tmp_path):
+    with pytest.raises(ValidationError):
+        make_settings(
+            tmp_path,
+            mcp_auth_mode="oauth",
+            mcp_oauth_issuer_url="https://id.example.com",
+            mcp_oauth_algorithms="HS256",
+        )
+
+
 def test_create_work_branch_request_has_current_base_ref_shape():
     schema = CreateWorkBranchRequest.model_json_schema()
     properties = schema["properties"]

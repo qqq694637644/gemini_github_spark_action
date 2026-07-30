@@ -276,7 +276,7 @@ def describe_prepared_changes(changes: list[PreparedFileChange]) -> tuple[list[C
 
 def commit_prepared_changes(repo_dir: Path, changes: list[PreparedFileChange]) -> None:
     repo_root = repo_dir.resolve()
-    transaction_parent = _git_dir(repo_root) / "gpt-workspace-transactions"
+    transaction_parent = _git_dir(repo_root) / "spark-workspace-transactions"
     transaction_dir = transaction_parent / ("txn_" + secrets.token_hex(12))
     staged_dir = transaction_dir / "staged"
     backup_dir = transaction_dir / "backups"

@@ -40,8 +40,9 @@ Thumbs.db
 # 项目运行时数据
 audit.db
 .tmp-manual-tests/
+.spark-artifacts/
+# Legacy workspace artifact root retained only for safe migration.
 .gpt-artifacts/
 
 # 生成文件
-openapi.json
 *.zip

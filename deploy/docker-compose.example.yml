@@ -1,0 +1,40 @@
+services:
+  gateway:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - ../.env
+    volumes:
+      - gateway-data:/data
+    expose:
+      - "8000"
+    networks:
+      - gateway
+
+  caddy:
+    image: caddy:2.8-alpine
+    restart: unless-stopped
+    depends_on:
+      gateway:
+        condition: service_healthy
+    environment:
+      GATEWAY_HOSTNAME: ${GATEWAY_HOSTNAME:?set GATEWAY_HOSTNAME}
+    volumes:
+      - ./Caddyfile.example:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    ports:
+      - "80:80"
+      - "443:443"
+    networks:
+      - gateway
+
+networks:
+  gateway:
+
+volumes:
+  gateway-data:
+  caddy-data:
+  caddy-config:

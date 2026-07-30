@@ -3,8 +3,9 @@ from __future__ import annotations
 import re
 from functools import lru_cache
 from typing import Literal
+from urllib.parse import urljoin, urlsplit
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _SIZE_RE = re.compile(r"^\s*(\d+(?:\.\d+)?)\s*([kmgt]?b?)?\s*$", re.IGNORECASE)
@@ -47,11 +48,24 @@ class Settings(BaseSettings):
 
     app_env: str = "development"
     public_base_url: str = "http://localhost:8000"
+    mcp_auth_mode: Literal["static_bearer", "oauth"] = "static_bearer"
     gateway_action_secret: str = ""
-    gpt_action_secret: str = ""
     mcp_path: str = "/mcp"
     mcp_allowed_hosts: str = ""
     mcp_allowed_origins: str = ""
+    mcp_oauth_issuer_url: str = ""
+    mcp_oauth_jwks_url: str = ""
+    mcp_oauth_introspection_url: str = ""
+    mcp_oauth_introspection_client_id: str = ""
+    mcp_oauth_introspection_client_secret: str = ""
+    mcp_oauth_audience: str = ""
+    mcp_oauth_algorithms: str = "RS256,ES256"
+    mcp_oauth_required_scopes: str = "github:read"
+    mcp_oauth_repo_claim: str = "github_repositories"
+    mcp_oauth_require_repo_claim: bool = True
+    mcp_oauth_http_timeout_seconds: float = Field(default=10.0, gt=0, le=120)
+    mcp_oauth_jwks_cache_seconds: int = Field(default=300, ge=1, le=86_400)
+    mcp_oauth_clock_skew_seconds: int = Field(default=30, ge=0, le=300)
 
     github_auth_mode: Literal["pat", "github_app"] = "pat"
     github_api_base_url: str = "https://api.github.com"
@@ -140,10 +154,83 @@ class Settings(BaseSettings):
             raise ValueError("workspace_python_venv_python must not be empty")
         return command
 
+    @field_validator("mcp_path")
+    @classmethod
+    def _normalize_mcp_path(cls, value: str) -> str:
+        path = str(value).strip()
+        if not path.startswith("/") or path == "/" or "?" in path or "#" in path:
+            raise ValueError("mcp_path must be an absolute non-root URL path without query or fragment")
+        return path.rstrip("/")
+
+    @model_validator(mode="after")
+    def _validate_auth_and_public_urls(self) -> Settings:
+        public = urlsplit(self.public_base_url)
+        if public.scheme not in {"http", "https"} or not public.netloc or public.query or public.fragment:
+            raise ValueError("public_base_url must be an absolute HTTP(S) URL without query or fragment")
+        if self.app_env.lower() == "production" and public.scheme != "https":
+            raise ValueError("production public_base_url must use HTTPS")
+
+        if self.mcp_auth_mode == "static_bearer":
+            if self.app_env.lower() == "production" and not self.static_bearer_tokens:
+                raise ValueError("GATEWAY_ACTION_SECRET is required for production static_bearer mode")
+            return self
+
+        issuer = urlsplit(self.mcp_oauth_issuer_url)
+        if issuer.scheme not in {"http", "https"} or not issuer.netloc or issuer.query or issuer.fragment:
+            raise ValueError("MCP_OAUTH_ISSUER_URL must be an absolute HTTP(S) URL without query or fragment")
+        if self.app_env.lower() == "production" and issuer.scheme != "https":
+            raise ValueError("production MCP_OAUTH_ISSUER_URL must use HTTPS")
+        if not self.oauth_required_scope_list:
+            raise ValueError("MCP_OAUTH_REQUIRED_SCOPES must contain at least one baseline scope")
+        if not self.oauth_algorithm_list and not self.mcp_oauth_introspection_url:
+            raise ValueError("MCP_OAUTH_ALGORITHMS is required for JWT mode")
+        asymmetric_algorithms = {
+            "RS256",
+            "RS384",
+            "RS512",
+            "PS256",
+            "PS384",
+            "PS512",
+            "ES256",
+            "ES384",
+            "ES512",
+            "EdDSA",
+        }
+        unsupported = sorted(set(self.oauth_algorithm_list) - asymmetric_algorithms)
+        if unsupported:
+            raise ValueError(f"MCP_OAUTH_ALGORITHMS contains unsupported or symmetric algorithms: {unsupported}")
+        for field_name, value in (
+            ("MCP_OAUTH_JWKS_URL", self.mcp_oauth_jwks_url),
+            ("MCP_OAUTH_INTROSPECTION_URL", self.mcp_oauth_introspection_url),
+        ):
+            if not value:
+                continue
+            parsed = urlsplit(value)
+            if parsed.scheme not in {"http", "https"} or not parsed.netloc or parsed.query or parsed.fragment:
+                raise ValueError(f"{field_name} must be an absolute HTTP(S) URL without query or fragment")
+            if self.app_env.lower() == "production" and parsed.scheme != "https":
+                raise ValueError(f"production {field_name} must use HTTPS")
+        return self
+
     @property
-    def secrets(self) -> list[str]:
-        values = [*parse_csv(self.gateway_action_secret), *parse_csv(self.gpt_action_secret)]
-        return list(dict.fromkeys(values))
+    def static_bearer_tokens(self) -> list[str]:
+        return list(dict.fromkeys(parse_csv(self.gateway_action_secret)))
+
+    @property
+    def mcp_resource_url(self) -> str:
+        return urljoin(f"{self.public_base_url.rstrip('/')}/", self.mcp_path)
+
+    @property
+    def oauth_required_scope_list(self) -> list[str]:
+        return parse_csv(self.mcp_oauth_required_scopes)
+
+    @property
+    def oauth_algorithm_list(self) -> list[str]:
+        return parse_csv(self.mcp_oauth_algorithms)
+
+    @property
+    def oauth_audience(self) -> str:
+        return self.mcp_oauth_audience.strip() or self.mcp_resource_url
 
     @property
     def allowed_repo_set(self) -> set[str]:

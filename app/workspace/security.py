@@ -14,8 +14,8 @@ BLOCKED_ALWAYS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"\bgh\s+secret\b", re.IGNORECASE), "GitHub secret operations are not allowed."),
     (re.compile(r"\bGet-ChildItem\s+Env:", re.IGNORECASE), "Enumerating process environment variables is not allowed."),
     (re.compile(r"\bGet-Content\s+\$env:", re.IGNORECASE), "Reading environment variables as files is not allowed."),
-    (re.compile(r"\bssh\b", re.IGNORECASE), "ssh is not allowed from workspaceCommand."),
-    (re.compile(r"\bscp\b", re.IGNORECASE), "scp is not allowed from workspaceCommand."),
+    (re.compile(r"\bssh\b", re.IGNORECASE), "ssh is not allowed from workspaceCommandStart."),
+    (re.compile(r"\bscp\b", re.IGNORECASE), "scp is not allowed from workspaceCommandStart."),
 ]
 
 NETWORK_BLOCKED: list[tuple[re.Pattern[str], str]] = [
@@ -30,7 +30,6 @@ SENSITIVE_ENV_EXACT = {
     "GH_TOKEN",
     "GITHUB_APP_PRIVATE_KEY",
     "GATEWAY_ACTION_SECRET",
-    "GPT_ACTION_SECRET",
     "GITHUB_APP_ID",
     "GITHUB_INSTALLATION_ID",
 }
@@ -90,7 +89,6 @@ def sanitized_environment(source: Mapping[str, str] | None = None) -> dict[str, 
             "GH_TOKEN": "",
             "GITHUB_APP_PRIVATE_KEY": "",
             "GATEWAY_ACTION_SECRET": "",
-            "GPT_ACTION_SECRET": "",
         }
     )
     return clean

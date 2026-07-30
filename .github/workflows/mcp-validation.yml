@@ -19,13 +19,16 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+          cache: pip
       - name: Install package and test dependencies
         run: python -m pip install -e '.[dev]'
+      - name: Run lint
+        run: ruff check app tests scripts
+      - name: Run MCP and authentication type checks
+        run: mypy app/auth/mcp.py app/mcp/server.py app/main.py
       - name: Run unit and local Git integration tests
         run: pytest -q
       - name: Validate MCP tool surface
         run: python scripts/validate_mcp.py
-      - name: Validate public OpenAPI surface
-        run: python scripts/export_openapi.py
-        env:
-          PUBLIC_BASE_URL: https://gateway.example.com
+      - name: Build production container
+        run: docker build --tag gemini-spark-github-gateway:test .

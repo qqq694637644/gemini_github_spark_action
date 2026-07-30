@@ -1,48 +1,57 @@
-# Gemini Spark Migration Plan
+# Gemini Spark Migration Completion Record
 
-## Stage 1: MCP compatibility baseline
+## Stage 1: MCP compatibility baseline — complete
 
-Status: implemented on the migration branch.
+- Migrated the workspace-first GitHub maintenance implementation and tests.
+- Added the official MCP Python SDK and Streamable HTTP endpoint at `/mcp`.
+- Exposed repository, pull-request, CI, workflow, log, and artifact services as MCP tools.
+- Added MCP read/write/destructive annotations, a Spark Skill, and an MCP prompt.
 
-- Copy the workspace-first GitHub gateway implementation and tests.
-- Add the official MCP Python SDK.
-- Mount a Streamable HTTP endpoint at `/mcp`.
-- Expose the existing 28 public operations as MCP tools.
-- Add MCP read/write/destructive annotations.
-- Add `SPARK_SKILL.md` and an MCP prompt.
-- Add static Bearer authentication with legacy secret compatibility.
-- Keep REST/OpenAPI available during migration.
-- Add tool-surface tests and CI validation.
+## Stage 2: Deployment and Gemini Spark acceptance assets — implementation complete
 
-## Stage 2: Gemini Spark integration validation
+- Added a non-root production Docker image with Git and PowerShell 7.
+- Added Docker Compose and Caddy HTTPS reverse-proxy examples.
+- Added a remote MCP acceptance validator for health, initialization, protocol negotiation, tool discovery, and session termination.
+- Added a manually dispatched remote-validation workflow using a repository secret.
+- Documented the exact Gemini Spark Connected App and Skill setup sequence.
 
-- Deploy behind HTTPS using a dedicated hostname.
-- Connect a Gemini Spark custom app with the MCP URL.
-- Configure manual Bearer credentials.
-- Verify initialization, tool listing, read-only workspace flow, local edit flow, commit/push, PR creation, and CI query.
-- Confirm how Gemini Spark presents nested Pydantic `request` parameters.
-- Record any tool-selection or schema issues before changing the service contract.
+Environment-owned execution remains necessary after review: provision the HTTPS hostname, identity-provider application, GitHub App installation, acceptance token, and Gemini Spark Connected App. These external resources cannot be created by repository code.
 
-## Stage 3: MCP-native ergonomics
+## Stage 3: MCP-native ergonomics — complete
 
-- Split `workspaceCommand` into start/get/logs/cancel/list MCP tools while retaining the REST envelope.
-- Consider flattening high-frequency MCP tool parameters if Spark struggles with nested request objects.
-- Add MCP-specific error mapping that preserves gateway error codes and suggestions.
-- Add protocol-level tests over Streamable HTTP, including session creation and termination.
-- Add explicit CORS only when a browser MCP client is required.
+- Replaced the combined `workspaceCommand` envelope with five MCP-native tools.
+- Flattened high-frequency command parameters.
+- Added structured MCP error mapping with gateway error code, HTTP-equivalent status, suggestion, and details.
+- Added protocol-level tests for exact `/mcp`, session creation/termination, prompt and tool discovery, and conditional CORS.
+- Declared the authoritative 32-tool surface in `app/mcp/tool_names.py`.
 
-## Stage 4: Production authorization
+## Stage 4: Production authorization — complete
 
-- Replace shared static Bearer authentication with OAuth 2.1 resource-server support.
-- Publish protected-resource metadata and authorization-server discovery.
-- Integrate an external identity provider.
-- Add per-user identity, scopes, repository authorization, revocation, and audit attribution.
-- Validate Gemini Spark credential discovery and consent behavior.
+- Added OAuth resource-server metadata and discovery challenges through the MCP SDK.
+- Added JWT/JWKS validation with issuer, audience, algorithm, lifetime, and clock-skew checks.
+- Added RFC 7662 introspection for opaque tokens and immediate revocation enforcement.
+- Added configurable baseline OAuth scopes plus per-tool scopes: `github:read`, `github:write`, `github:workflow`, and `github:merge`.
+- Added configurable per-user repository authorization claims.
+- Added authenticated actor/client/scopes to MCP audit metadata without storing access tokens.
+- Retained static Bearer mode only as an explicit local/single-user fallback.
 
-## Stage 5: Compatibility retirement
+## Stage 5: Compatibility retirement — complete
 
-- Confirm no remaining GPT Actions/OpenAPI consumers.
-- Remove `x-openai-isConsequential`, OpenAPI export constraints, and prompt-version compatibility metadata.
-- Remove `GPT_ACTION_SECRET` after a documented deprecation window.
-- Rename remaining `.gpt-artifacts` paths only through a backward-compatible migration.
-- Rename the validation workflow file after the content migration has stabilized.
+- Removed REST repository routes, OpenAPI export, Swagger/OpenAPI endpoints, action operation allowlists, and OpenAI schema extensions.
+- Removed `PROMPT.md`, `GPT_ACTION_SECRET`, and the legacy combined command request model.
+- Renamed the validation workflow to MCP terminology.
+- Changed artifact storage to `.spark-artifacts` with a safe migration from existing `.gpt-artifacts` workspace data.
+- Updated package, documentation, configuration, tests, and CI to version 2.0.0.
+
+## Completion criteria
+
+Repository migration is complete when the migration PR has:
+
+- full unit and local Git integration tests passing;
+- lint passing;
+- MCP/authentication type checks passing;
+- MCP surface validation passing;
+- production container build passing;
+- GitHub Actions completed successfully.
+
+Deployment acceptance is complete for a specific environment only after `scripts/validate_remote_mcp.py` succeeds against its HTTPS endpoint and a Gemini Spark user confirms the Connected App authorization flow. The repository provides those checks but intentionally contains no deployment credentials or provider-specific secrets.

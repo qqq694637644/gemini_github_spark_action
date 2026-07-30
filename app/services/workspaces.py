@@ -14,6 +14,7 @@ from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
 from typing import Any
 
+from app.auth.mcp import current_actor
 from app.config.settings import Settings
 from app.errors import ApiError, ErrorCode
 from app.github.client import GitHubClient
@@ -29,7 +30,6 @@ from app.models.workspaces import (
     WorkspaceCommandGetRequest,
     WorkspaceCommandListRequest,
     WorkspaceCommandLogsRequest,
-    WorkspaceCommandRequest,
     WorkspaceCommandResponse,
     WorkspaceCommandStartRequest,
     WorkspaceCommandVariant,
@@ -74,8 +74,9 @@ from app.workspace.text_ops import (
     validate_write_target,
 )
 
-_ARTIFACTS_ROOT = ".gpt-artifacts"
-_ARTIFACTS_EXCLUDE_ENTRY = ".gpt-artifacts/"
+_ARTIFACTS_ROOT = ".spark-artifacts"
+_LEGACY_ARTIFACTS_ROOT = ".gpt-artifacts"
+_ARTIFACTS_EXCLUDE_ENTRIES = (".spark-artifacts/", ".gpt-artifacts/")
 _ARTIFACT_PAGE_SIZE = 100
 _SAFE_ARTIFACT_NAME_RE = re.compile(r"[^A-Za-z0-9._-]+")
 _EXCLUDED_INSPECT_DIRS = {
@@ -89,6 +90,8 @@ _EXCLUDED_INSPECT_DIRS = {
     "env",
     ".tox",
     ".nox",
+    _ARTIFACTS_ROOT,
+    _LEGACY_ARTIFACTS_ROOT,
 }
 _ALLOWED_ENV_READ_FILES = {".env.example", ".env.sample", ".env.template"}
 _MIN_STRUCTURED_RESPONSE_BYTES = 1024
@@ -189,20 +192,17 @@ class WorkspaceService:
         owner: str,
         repo: str,
         workspace_id: str,
-        request: WorkspaceCommandRequest | WorkspaceCommandVariant,
+        request: WorkspaceCommandVariant,
     ) -> WorkspaceCommandResponse:
         meta = self._assert_workspace(owner, repo, workspace_id)
         if self.operations is None:
             raise ApiError(ErrorCode.WORKSPACE_EXEC_FAILED, "Workspace operation manager is unavailable.", status_code=500)
 
-        if isinstance(request, WorkspaceCommandRequest):
-            request = request.to_variant()
-
         if isinstance(request, WorkspaceCommandStartRequest):
             if request.timeout_seconds is not None and request.timeout_seconds > self.settings.workspace_max_timeout_seconds:
                 raise ApiError(
                     ErrorCode.VALIDATION_ERROR,
-                    "workspaceCommand timeout_seconds exceeds the configured limit.",
+                    "workspaceCommandStart timeout_seconds exceeds the configured limit.",
                     status_code=422,
                     details={
                         "requested_timeout_seconds": request.timeout_seconds,
@@ -232,7 +232,7 @@ class WorkspaceService:
                 python_venv_dir=self.settings.workspace_python_venv_dir,
             )
             self._audit(
-                operation_id="workspaceCommand",
+                operation_id="workspaceCommandStart",
                 owner=owner,
                 repo=repo,
                 workspace_id=workspace_id,
@@ -266,7 +266,7 @@ class WorkspaceService:
                 max_bytes=request.max_bytes,
             )
             return WorkspaceCommandResponse(action="logs", **logs)
-        raise ApiError(ErrorCode.VALIDATION_ERROR, "Unknown workspaceCommand action.", status_code=422)
+        raise ApiError(ErrorCode.VALIDATION_ERROR, "Unknown workspace command action.", status_code=422)
 
     async def read_files(self, owner: str, repo: str, workspace_id: str, request: WorkspaceReadFilesRequest) -> WorkspaceReadFilesResponse:
         meta = self._assert_workspace(owner, repo, workspace_id)
@@ -1173,7 +1173,8 @@ class WorkspaceService:
         gitignore_path_rel = ".git/info/exclude"
 
         with self.manager.workspace_scope(workspace_id):
-            gitignore_updated = _ensure_gpt_artifacts_local_exclude(repo_dir)
+            legacy_path_migrated = _migrate_legacy_artifacts_root(repo_dir)
+            gitignore_updated = _ensure_artifacts_local_exclude(repo_dir)
             existing_manifest = _read_artifact_manifest(manifest_path)
             skipped = _manifest_is_current(repo_dir, existing_manifest, remote_fingerprint)
             if skipped:
@@ -1228,6 +1229,7 @@ class WorkspaceService:
             skipped=skipped,
             gitignore_path=gitignore_path_rel,
             gitignore_updated=gitignore_updated,
+            legacy_path_migrated=legacy_path_migrated,
             artifacts=artifacts,
             total_count=total_count,
         )
@@ -1243,6 +1245,7 @@ class WorkspaceService:
                 "remote_fingerprint": remote_fingerprint,
                 "downloaded": response.downloaded,
                 "skipped": response.skipped,
+                "legacy_path_migrated": response.legacy_path_migrated,
                 "artifact_count": len(artifacts),
             },
         )
@@ -1272,6 +1275,7 @@ class WorkspaceService:
 
     def _audit(self, **kwargs) -> None:
         try:
+            kwargs.setdefault("actor", current_actor())
             self.audit.record_workspace_operation(**kwargs)
         except Exception:
             pass
@@ -1398,29 +1402,48 @@ def _artifact_fingerprint_inputs(artifacts: list[dict[str, Any]]) -> list[dict[s
     ]
 
 
-def _ensure_gpt_artifacts_local_exclude(repo_dir: Path) -> bool:
+def _migrate_legacy_artifacts_root(repo_dir: Path) -> bool:
+    legacy = repo_dir / _LEGACY_ARTIFACTS_ROOT
+    current = repo_dir / _ARTIFACTS_ROOT
+    if not legacy.exists() and not legacy.is_symlink():
+        return False
+    if legacy.is_symlink() or current.is_symlink():
+        raise ApiError(
+            ErrorCode.WORKSPACE_POLICY_VIOLATION,
+            "Artifact migration refuses symbolic-link roots.",
+            status_code=409,
+        )
+    if current.exists():
+        return False
+    legacy.rename(current)
+    return True
+
+
+def _ensure_artifacts_local_exclude(repo_dir: Path) -> bool:
     exclude = repo_dir / ".git" / "info" / "exclude"
     exclude.parent.mkdir(parents=True, exist_ok=True)
     text = exclude.read_text(encoding="utf-8", errors="replace") if exclude.exists() else ""
-    if _exclude_has_gpt_artifacts_entry(text):
+    missing = [entry for entry in _ARTIFACTS_EXCLUDE_ENTRIES if not _exclude_has_artifacts_entry(text, entry)]
+    if not missing:
         return False
     if text and not text.endswith("\n"):
         text += "\n"
     if text.strip():
         text += "\n"
-    text += "# Gemini Spark GitHub Gateway synced artifacts\n" + _ARTIFACTS_EXCLUDE_ENTRY + "\n"
+    text += "# Gemini Spark GitHub Gateway synced artifacts\n" + "\n".join(missing) + "\n"
     exclude.write_text(text, encoding="utf-8")
     return True
 
 
-def _exclude_has_gpt_artifacts_entry(text: str) -> bool:
+def _exclude_has_artifacts_entry(text: str, canonical: str) -> bool:
+    root = canonical.rstrip("/")
     accepted = {
-        ".gpt-artifacts",
-        ".gpt-artifacts/",
-        ".gpt-artifacts/**",
-        "/.gpt-artifacts",
-        "/.gpt-artifacts/",
-        "/.gpt-artifacts/**",
+        root,
+        f"{root}/",
+        f"{root}/**",
+        f"/{root}",
+        f"/{root}/",
+        f"/{root}/**",
     }
     for line in text.splitlines():
         entry = line.split("#", 1)[0].strip()

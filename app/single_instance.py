@@ -26,9 +26,7 @@ def acquire_single_instance() -> None:
         kernel32.CreateMutexW.restype = ctypes.c_void_p
         kernel32.CloseHandle.argtypes = [ctypes.c_void_p]
         kernel32.CloseHandle.restype = ctypes.c_bool
-        # Keep the legacy mutex name so old and migrated gateway processes
-        # cannot accidentally operate on the same workspace storage together.
-        handle = kernel32.CreateMutexW(None, False, "Global\\GitHubGptActionsGateway")
+        handle = kernel32.CreateMutexW(None, False, "Global\\GeminiSparkGitHubMcpGateway")
         if not handle:
             raise OSError(ctypes.get_last_error(), "CreateMutexW failed")
         if ctypes.get_last_error() == 183:  # ERROR_ALREADY_EXISTS

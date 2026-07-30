@@ -587,15 +587,18 @@ def test_sync_run_artifacts_to_workspace_downloads_and_skips_unchanged_run(tmp_p
 
     assert first.downloaded is True
     assert first.skipped is False
-    assert first.target_dir == ".gpt-artifacts/runs/77"
-    assert first.manifest_path == ".gpt-artifacts/runs/77/manifest.json"
+    assert first.target_dir == ".spark-artifacts/runs/77"
+    assert first.manifest_path == ".spark-artifacts/runs/77/manifest.json"
     assert first.gitignore_path == ".git/info/exclude"
     assert first.gitignore_updated is True
-    assert first.artifacts[0].destination_dir == ".gpt-artifacts/runs/77/55-reports"
+    assert first.legacy_path_migrated is False
+    assert first.artifacts[0].destination_dir == ".spark-artifacts/runs/77/55-reports"
     assert (repo_dir / first.artifacts[0].destination_dir / "junit.xml").read_text(encoding="utf-8").startswith("<testsuite")
     assert json.loads((repo_dir / first.manifest_path).read_text(encoding="utf-8"))["remote_fingerprint"] == first.remote_fingerprint
-    assert ".gpt-artifacts/" in (repo_dir / ".git" / "info" / "exclude").read_text(encoding="utf-8")
-    assert ".gpt-artifacts" not in git("status", "--porcelain=v1", "--untracked-files=all", cwd=repo_dir)
+    exclude = (repo_dir / ".git" / "info" / "exclude").read_text(encoding="utf-8")
+    assert ".spark-artifacts/" in exclude
+    assert ".gpt-artifacts/" in exclude
+    assert ".spark-artifacts" not in git("status", "--porcelain=v1", "--untracked-files=all", cwd=repo_dir)
     status = run(service.status("acme", "demo", prepared.workspace_id, WorkspaceStatusRequest()))
     assert status.dirty is False
     assert status.changed_files == []
@@ -617,6 +620,28 @@ def test_sync_run_artifacts_to_workspace_downloads_and_skips_unchanged_run(tmp_p
     assert second.skipped is True
     assert github.downloaded_artifacts == [55]
 
+
+def test_sync_run_artifacts_migrates_legacy_root(tmp_path: Path):
+    remote, _ = make_local_repo(tmp_path)
+    service, manager = make_service(tmp_path, remote)
+    prepared = run(service.prepare("acme", "demo", prepare_request(branch="gpt/task", workspace_id="ws_artifacts_migrate")))
+    repo_dir = manager.repo_dir(prepared.workspace_id)
+    legacy = repo_dir / ".gpt-artifacts"
+    legacy.mkdir()
+    (legacy / "legacy.txt").write_text("legacy\n", encoding="utf-8")
+
+    response = run(
+        service.sync_run_artifacts_to_workspace(
+            "acme",
+            "demo",
+            prepared.workspace_id,
+            SyncRunArtifactsToWorkspaceRequest(run_id=77),
+        )
+    )
+
+    assert response.legacy_path_migrated is True
+    assert not legacy.exists()
+    assert (repo_dir / ".spark-artifacts" / "legacy.txt").read_text(encoding="utf-8") == "legacy\n"
 
 def test_sync_run_artifacts_to_workspace_replaces_target_when_digest_changes(tmp_path: Path):
     remote, _ = make_local_repo(tmp_path)
@@ -1334,7 +1359,7 @@ def test_partial_stage_write_is_cleaned_from_git_transaction_directory(tmp_path:
         before=b"before\n",
         after=b"after\n",
     )
-    transaction_parent = repo_dir / ".git" / "gpt-workspace-transactions"
+    transaction_parent = repo_dir / ".git" / "spark-workspace-transactions"
     real_write_bytes = Path.write_bytes
 
     def partial_then_fail(path: Path, data: bytes) -> int:
@@ -1366,7 +1391,7 @@ def test_partial_transaction_cleanup_failure_preserves_committed_workspace_chang
         before=before_bytes,
         after=b"after\n",
     )
-    transaction_parent = repo_dir / ".git" / "gpt-workspace-transactions"
+    transaction_parent = repo_dir / ".git" / "spark-workspace-transactions"
     real_rmtree = shutil.rmtree
 
     def delete_backups_then_fail(path: str | os.PathLike[str], *args, **kwargs) -> None:

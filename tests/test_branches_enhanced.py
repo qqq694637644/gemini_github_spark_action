@@ -34,7 +34,7 @@ class BranchGitHubStub:
 
 
 def make_service() -> BranchService:
-    settings = Settings(gpt_action_secret="secret", allowed_repos="acme/demo")
+    settings = Settings(gateway_action_secret="secret", allowed_repos="acme/demo")
     return BranchService(BranchGitHubStub(), Policy(settings), settings)
 
 

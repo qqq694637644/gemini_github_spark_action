@@ -26,7 +26,7 @@ class EmptyRepoGitHubStub:
 
 
 def make_service(tmp_path, github: EmptyRepoGitHubStub) -> BranchService:
-    settings = Settings(gpt_action_secret="secret", allowed_repos="acme/demo", audit_db_url=f"sqlite:///{tmp_path / 'audit.db'}")
+    settings = Settings(gateway_action_secret="secret", allowed_repos="acme/demo", audit_db_url=f"sqlite:///{tmp_path / 'audit.db'}")
     return BranchService(github, Policy(settings), settings, AuditStore(settings.audit_db_url))
 
 

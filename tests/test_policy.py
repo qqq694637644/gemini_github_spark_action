@@ -8,7 +8,7 @@ from app.policy.rules import Policy, normalize_path, sanitize_purpose_slug
 
 
 def make_policy(**kwargs) -> Policy:
-    values = {"gpt_action_secret": "secret", "allowed_repos": "acme/demo"}
+    values = {"gateway_action_secret": "secret", "allowed_repos": "acme/demo"}
     values.update(kwargs)
     return Policy(Settings(**values))
 

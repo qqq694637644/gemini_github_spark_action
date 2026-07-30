@@ -53,7 +53,6 @@ def test_sanitized_environment_removes_sensitive_values():
         "GITHUB_TOKEN": "secret",
         "GH_TOKEN": "secret",
         "GATEWAY_ACTION_SECRET": "secret",
-        "GPT_ACTION_SECRET": "secret",
         "CUSTOM_PASSWORD": "secret",
         "HOME": "/tmp/home",
     }
@@ -63,5 +62,4 @@ def test_sanitized_environment_removes_sensitive_values():
     assert clean["GITHUB_TOKEN"] == ""
     assert clean["GH_TOKEN"] == ""
     assert clean["GATEWAY_ACTION_SECRET"] == ""
-    assert clean["GPT_ACTION_SECRET"] == ""
     assert "CUSTOM_PASSWORD" not in clean

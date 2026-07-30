@@ -300,6 +300,7 @@ class SyncRunArtifactsToWorkspaceResponse(GatewayBaseModel):
     skipped: bool
     gitignore_path: str
     gitignore_updated: bool
+    legacy_path_migrated: bool = False
     artifacts: list[SyncedRunArtifact]
     total_count: int
     warning: str | None = None

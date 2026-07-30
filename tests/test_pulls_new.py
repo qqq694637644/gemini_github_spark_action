@@ -79,7 +79,7 @@ class PullGitHubStub:
 
 
 def make_service(github: PullGitHubStub) -> PullRequestService:
-    settings = Settings(gpt_action_secret="secret", allowed_repos="acme/demo")
+    settings = Settings(gateway_action_secret="secret", allowed_repos="acme/demo")
     return PullRequestService(github, Policy(settings))
 
 
