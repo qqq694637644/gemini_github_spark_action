@@ -32,5 +32,7 @@ def test_windows_setup_scripts_never_embed_real_credentials() -> None:
     assert "getpass.getpass" in setup_python
     assert "OAuth client secret: saved only" in setup_python
     assert "icacls.exe" in setup_powershell
-    assert '"${env:USERNAME}:(OI)(CI)F"' in setup_powershell
+    assert "WindowsIdentity]::GetCurrent().Name" in setup_powershell
+    assert '"${currentIdentity}:(OI)(CI)F" /T /C' in setup_powershell
+    assert '"${currentIdentity}:F"' in setup_powershell
     assert "--host 0.0.0.0" not in (ROOT / "scripts" / "run_windows_builtin_oauth.ps1").read_text(encoding="utf-8")

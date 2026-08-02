@@ -61,9 +61,14 @@ if ($Force) {
 & $venvPython @arguments
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+$currentIdentity = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
 foreach ($sensitivePath in @((Join-Path $repoRoot "data"), (Join-Path $repoRoot ".env"))) {
     try {
-        & icacls.exe $sensitivePath /inheritance:r /grant:r "${env:USERNAME}:(OI)(CI)F" | Out-Null
+        if (Test-Path $sensitivePath -PathType Container) {
+            & icacls.exe $sensitivePath /inheritance:r /grant:r "${currentIdentity}:(OI)(CI)F" /T /C | Out-Null
+        } else {
+            & icacls.exe $sensitivePath /inheritance:r /grant:r "${currentIdentity}:F" | Out-Null
+        }
         if ($LASTEXITCODE -ne 0) { throw "icacls exited with code $LASTEXITCODE" }
     } catch {
         Write-Warning "Could not tighten ACL for $sensitivePath automatically: $($_.Exception.Message)"
