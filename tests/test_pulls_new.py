@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import asyncio
 
+import pytest
+
 from app.config.settings import Settings
+from app.errors import ApiError, ErrorCode
 from app.models.pulls import (
     CommentPullRequestRequest,
     CreatePullRequestRequest,
@@ -79,7 +82,7 @@ class PullGitHubStub:
 
 
 def make_service(github: PullGitHubStub) -> PullRequestService:
-    settings = Settings(gateway_action_secret="secret", allowed_repos="acme/demo")
+    settings = Settings(gateway_action_secret="secret", allowed_repos="acme/demo", write_branch_prefix="gpt/")
     return PullRequestService(github, Policy(settings))
 
 
@@ -132,22 +135,26 @@ def test_create_pull_request_can_target_arbitrary_base_branch() -> None:
     assert github.created == {"head": "gpt/child", "base": "feature/parent", "title": "Follow up", "body": "Stacked PR"}
 
 
-def test_create_pull_request_can_use_arbitrary_head_branch() -> None:
+def test_create_pull_request_rejects_unprefixed_head_branch() -> None:
     github = PullGitHubStub()
     service = make_service(github)
 
-    response = asyncio.run(
-        service.create_pull_request(
-            "acme",
-            "demo",
-            CreatePullRequestRequest(head_branch="feature/direct-maintenance", base_branch="main", title="Follow up", body="Stacked PR"),
+    with pytest.raises(ApiError) as exc:
+        asyncio.run(
+            service.create_pull_request(
+                "acme",
+                "demo",
+                CreatePullRequestRequest(
+                    head_branch="feature/direct-maintenance",
+                    base_branch="main",
+                    title="Follow up",
+                    body="Stacked PR",
+                ),
+            )
         )
-    )
 
-    assert response.pr_number == 8
-    assert response.head_branch == "feature/direct-maintenance"
-    assert response.base_branch == "main"
-    assert github.created == {"head": "feature/direct-maintenance", "base": "main", "title": "Follow up", "body": "Stacked PR"}
+    assert exc.value.error_code == ErrorCode.BRANCH_NOT_ALLOWED
+    assert github.created is None
 
 
 def test_pull_request_update_and_comment() -> None:

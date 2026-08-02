@@ -78,7 +78,8 @@ class PullRequestService:
         self.policy.assert_repo_allowed(owner, repo)
         pr = await self.github.get_pull_request(owner, repo, request.pr_number)
         info = self._info(pr)
-        self.policy.assert_write_branch_allowed(info.head_branch)
+        if not info.head_branch:
+            raise ApiError(ErrorCode.GITHUB_ERROR, "Pull request head branch is missing.", status_code=502)
         if info.merged:
             raise ApiError(ErrorCode.GITHUB_CONFLICT, "Pull request is already merged.", status_code=409, details={"pr_number": request.pr_number})
         if info.state != "open":

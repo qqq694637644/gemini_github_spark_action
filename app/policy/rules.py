@@ -11,7 +11,11 @@ from app.errors import ApiError, ErrorCode
 _SHA_RE = re.compile(r"^[0-9a-fA-F]{40}$")
 _PURPOSE_RE = re.compile(r"[^a-z0-9-]+")
 
-ALLOW_WRITE_PATHS = {".env.example", ".env.sample", ".env.template"}
+ALLOW_WRITE_PATHS = {
+    ".env.example",
+    ".env.sample",
+    ".env.template",
+}
 DENY_WRITE_PATTERNS = [
     ".env",
     ".env.*",
@@ -137,9 +141,43 @@ class Policy:
                 details={"ref": ref, "allowlist": self.settings.read_branch_patterns},
             )
 
-    def assert_write_branch_allowed(self, branch: str) -> None:
+    def assert_write_branch_allowed(
+        self,
+        branch: str,
+        *,
+        allow_existing_pr_branch: bool = False,
+        default_branch: str | None = None,
+    ) -> None:
         if not branch or not branch.strip():
             raise ApiError(ErrorCode.BRANCH_NOT_ALLOWED, "Branch name must be non-empty.", status_code=400)
+        normalized = branch.strip()
+        if normalized != branch:
+            raise ApiError(ErrorCode.BRANCH_NOT_ALLOWED, "Branch name must not have surrounding whitespace.", status_code=400)
+
+        protected_defaults = {self.settings.default_base_branch}
+        if default_branch:
+            protected_defaults.add(default_branch.strip())
+        if normalized in protected_defaults:
+            raise ApiError(
+                ErrorCode.BRANCH_NOT_ALLOWED,
+                "Direct writes to the default branch are disabled.",
+                status_code=403,
+                suggestion="Create a maintenance branch and merge it through mergePullRequest.",
+                details={"branch": normalized, "protected_branches": sorted(protected_defaults)},
+            )
+
+        if allow_existing_pr_branch:
+            return
+
+        prefix = self.settings.write_branch_prefix
+        if not normalized.startswith(prefix) or normalized == prefix:
+            raise ApiError(
+                ErrorCode.BRANCH_NOT_ALLOWED,
+                f"Writable maintenance branches must start with {prefix!r}.",
+                status_code=403,
+                suggestion="Create a prefixed maintenance branch, or continue an existing branch through source_pr_number.",
+                details={"branch": normalized, "required_prefix": prefix},
+            )
 
     def assert_workspace_path_allowed(self, path: str) -> str:
         return normalize_path(path)

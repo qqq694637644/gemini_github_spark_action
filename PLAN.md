@@ -11,11 +11,12 @@
 
 - Added a non-root production Docker image with Git and PowerShell 7.
 - Added Docker Compose and Caddy HTTPS reverse-proxy examples.
-- Added a remote MCP acceptance validator for health, initialization, protocol negotiation, tool discovery, and session termination.
+- Added a remote MCP acceptance validator for health, initialization, protocol negotiation, tool discovery, session termination, and optional real read-only GitHub/workspace tool calls.
 - Added a manually dispatched remote-validation workflow using a repository secret.
+- Changed the default deployment template to personal static Bearer + fine-grained PAT, with the OAuth/GitHub App template under `deploy/`.
 - Documented the exact Gemini Spark Connected App and Skill setup sequence.
 
-Environment-owned execution remains necessary after review: provision the HTTPS hostname, identity-provider application, GitHub App installation, acceptance token, and Gemini Spark Connected App. These external resources cannot be created by repository code.
+Environment-owned execution remains necessary after review: provision the HTTPS hostname, GitHub credential, acceptance token, and Gemini Spark Connected App. An identity-provider application and GitHub App installation are needed only when the advanced multi-user mode is selected. These external resources cannot be created by repository code.
 
 ## Stage 3: MCP-native ergonomics — complete
 

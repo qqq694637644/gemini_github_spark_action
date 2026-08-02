@@ -43,11 +43,36 @@ def test_empty_repo_allowlist_rejects_when_allow_all_repos_is_false() -> None:
 
 def test_write_branch_policy() -> None:
     policy = make_policy()
-    policy.assert_write_branch_allowed("gpt/fix-thing")
-    policy.assert_write_branch_allowed("feature/fix-thing")
-    policy.assert_write_branch_allowed("main")
+    policy.assert_write_branch_allowed("spark/fix-thing")
     with pytest.raises(ApiError):
         policy.assert_write_branch_allowed("")
+    with pytest.raises(ApiError) as prefix_error:
+        policy.assert_write_branch_allowed("feature/fix-thing")
+    with pytest.raises(ApiError) as default_error:
+        policy.assert_write_branch_allowed("main")
+
+    assert prefix_error.value.error_code == ErrorCode.BRANCH_NOT_ALLOWED
+    assert default_error.value.error_code == ErrorCode.BRANCH_NOT_ALLOWED
+    assert "default branch" in default_error.value.message
+
+
+def test_existing_pr_branch_can_bypass_prefix_but_not_default_branch() -> None:
+    policy = make_policy()
+    policy.assert_write_branch_allowed("feature/existing-pr", allow_existing_pr_branch=True)
+
+    with pytest.raises(ApiError) as exc:
+        policy.assert_write_branch_allowed("main", allow_existing_pr_branch=True)
+
+    assert exc.value.error_code == ErrorCode.BRANCH_NOT_ALLOWED
+
+    with pytest.raises(ApiError) as actual_default:
+        policy.assert_write_branch_allowed(
+            "trunk",
+            allow_existing_pr_branch=True,
+            default_branch="trunk",
+        )
+
+    assert actual_default.value.error_code == ErrorCode.BRANCH_NOT_ALLOWED
 
 
 def test_workflow_edit_blocked_by_default() -> None:
@@ -74,7 +99,10 @@ def test_local_python_env_writes_are_blocked_but_deletions_are_allowed() -> None
     assert policy.assert_write_path_allowed(".venv/Lib/site-packages/pkg.py", operation="deleted") == ".venv/Lib/site-packages/pkg.py"
 
 
-@pytest.mark.parametrize("path", [".env.example", ".env.sample", ".env.template"])
+@pytest.mark.parametrize(
+    "path",
+    [".env.example", ".env.sample", ".env.template"],
+)
 def test_safe_env_example_files_are_allowed(path: str) -> None:
     policy = make_policy()
 

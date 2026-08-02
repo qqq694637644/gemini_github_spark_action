@@ -7,6 +7,19 @@ on:
         description: HTTPS MCP endpoint, for example https://gateway.example.com/mcp
         required: true
         type: string
+      test_owner:
+        description: Optional GitHub owner for read-only end-to-end tool validation
+        required: false
+        type: string
+      test_repo:
+        description: Optional GitHub repository for read-only end-to-end tool validation
+        required: false
+        type: string
+      test_ref:
+        description: Git ref used by the read-only validation flow
+        required: false
+        default: main
+        type: string
 
 permissions:
   contents: read
@@ -26,4 +39,7 @@ jobs:
         env:
           MCP_SERVER_URL: ${{ inputs.mcp_server_url }}
           MCP_ACCESS_TOKEN: ${{ secrets.MCP_ACCEPTANCE_ACCESS_TOKEN }}
+          MCP_TEST_OWNER: ${{ inputs.test_owner }}
+          MCP_TEST_REPO: ${{ inputs.test_repo }}
+          MCP_TEST_REF: ${{ inputs.test_ref }}
         run: python scripts/validate_remote_mcp.py

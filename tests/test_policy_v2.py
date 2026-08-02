@@ -10,9 +10,16 @@ def policy():
     return Policy(Settings(allow_all_repos=True))
 
 
-@pytest.mark.parametrize("branch", ["main", "master", "develop", "release/1.0", "production/x", "hotfix/x", "feature/x", "gpt/fix-ci"])
-def test_write_branch_allows_arbitrary_non_empty_branch(policy, branch):
+@pytest.mark.parametrize("branch", ["spark/fix-ci", "spark/hotfix-x", "spark/release-1.0"])
+def test_write_branch_allows_configured_prefix(policy, branch):
     policy.assert_write_branch_allowed(branch)
+
+
+@pytest.mark.parametrize("branch", ["main", "master", "develop", "release/1.0", "production/x", "hotfix/x", "feature/x"])
+def test_write_branch_rejects_default_or_unprefixed_branch(policy, branch):
+    with pytest.raises(ApiError) as exc:
+        policy.assert_write_branch_allowed(branch)
+    assert exc.value.error_code == ErrorCode.BRANCH_NOT_ALLOWED
 
 
 def test_write_branch_rejects_empty_branch(policy):

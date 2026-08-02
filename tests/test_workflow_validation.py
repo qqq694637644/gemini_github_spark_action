@@ -17,5 +17,8 @@ def test_remote_validation_workflow_requires_an_explicit_endpoint_and_secret() -
 
     assert "workflow_dispatch" in workflow
     assert "mcp_server_url" in workflow
+    assert "test_owner" in workflow
+    assert "test_repo" in workflow
+    assert "MCP_TEST_OWNER" in workflow
     assert "MCP_ACCEPTANCE_ACCESS_TOKEN" in workflow
     assert "scripts/validate_remote_mcp.py" in workflow

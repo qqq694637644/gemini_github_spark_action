@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import sys
 from functools import lru_cache
 from typing import Literal
 from urllib.parse import urljoin, urlsplit
@@ -111,7 +112,7 @@ class Settings(BaseSettings):
     workspace_git_user_email: str = "gemini-spark-gateway@users.noreply.github.com"
     workspace_python_venv_enabled: bool = True
     workspace_python_venv_dir: str = ".venv"
-    workspace_python_venv_python: str = "py -3.13"
+    workspace_python_venv_python: str = Field(default_factory=lambda: sys.executable)
     workspace_python_auto_gitignore: bool = True
     workspace_python_auto_activate: bool = True
 
@@ -153,6 +154,16 @@ class Settings(BaseSettings):
         if not command:
             raise ValueError("workspace_python_venv_python must not be empty")
         return command
+
+    @field_validator("write_branch_prefix", "default_base_branch")
+    @classmethod
+    def _validate_branch_policy_values(cls, value: str, info) -> str:
+        normalized = str(value).strip()
+        if not normalized:
+            raise ValueError(f"{info.field_name} must not be empty")
+        if normalized != value:
+            raise ValueError(f"{info.field_name} must not have leading or trailing whitespace")
+        return normalized
 
     @field_validator("mcp_path")
     @classmethod

@@ -1,3 +1,5 @@
+import sys
+
 import pytest
 from pydantic import ValidationError
 
@@ -15,7 +17,7 @@ def test_workspace_python_settings_describe_current_bootstrap_surface(tmp_path):
 
     assert settings.workspace_python_venv_enabled is True
     assert settings.workspace_python_venv_dir == ".venv"
-    assert settings.workspace_python_venv_python == "py -3.13"
+    assert settings.workspace_python_venv_python == sys.executable
     assert settings.workspace_python_auto_gitignore is True
     assert settings.workspace_python_auto_activate is True
     assert {name for name in Settings.model_fields if name.startswith("workspace_python_")} == {
@@ -122,3 +124,9 @@ def test_workspace_python_venv_dir_normalizes_relative_trailing_slash(tmp_path) 
     settings = make_settings(tmp_path, workspace_python_venv_dir="tools/.venv/")
 
     assert settings.workspace_python_venv_dir == "tools/.venv"
+
+
+@pytest.mark.parametrize("field", ["write_branch_prefix", "default_base_branch"])
+def test_branch_policy_settings_reject_empty_values(tmp_path, field: str) -> None:
+    with pytest.raises(ValidationError):
+        make_settings(tmp_path, **{field: "  "})

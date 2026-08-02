@@ -24,7 +24,7 @@ Prepare a workspace before reading or modifying repository content, and save the
 
 For read-only investigation, prepare from the requested ref and do not modify, commit, push, or create a pull request.
 
-For new maintenance, create or prepare a task branch from the base ref. Prefer `spark/*` unless the user specifies another valid branch. For an existing pull request, read the PR first and prepare from its head branch.
+For new maintenance, create or prepare a task branch using the configured maintenance prefix (`spark/*` by default). Direct writes to the default branch are forbidden. A non-prefixed existing branch may only be continued by preparing from `source_pr_number` for a same-repository pull request. For an existing pull request, read the PR first and prepare from its head branch.
 
 Never invent workspace IDs. Retry interrupted preparation with the identical request and idempotency key. Do not force-push or overwrite a changed remote branch; re-read state when the remote head changes.
 

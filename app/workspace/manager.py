@@ -121,7 +121,11 @@ class WorkspaceManager:
         writable = branch is not None
         if writable:
             assert branch is not None
-            self.policy.assert_write_branch_allowed(branch)
+            self.policy.assert_write_branch_allowed(
+                branch,
+                allow_existing_pr_branch=source_pr_number is not None,
+                default_branch=default_branch,
+            )
             target_ref: str = branch
         else:
             target_ref = base_ref or default_branch
@@ -568,6 +572,9 @@ def _make_tree_entry_writable_and_retry(func: Callable[[str], object], path: str
 
 
 def split_command(command: str) -> list[str]:
+    direct = strip_matching_quotes(command.strip())
+    if Path(direct).is_file():
+        return [direct]
     parts = shlex.split(command, posix=os.name != "nt")
     if not parts:
         raise ApiError(ErrorCode.VALIDATION_ERROR, "Python venv command is empty.", status_code=422)

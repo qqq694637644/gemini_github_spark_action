@@ -61,6 +61,17 @@ class LocalGitHub:
     async def get_repository(self, owner: str, repo: str) -> dict:
         return {"default_branch": "main"}
 
+    async def get_pull_request(self, owner: str, repo: str, pr_number: int) -> dict:
+        return {
+            "number": pr_number,
+            "head": {
+                "ref": "feature/task",
+                "sha": git("rev-parse", "refs/heads/feature/task", cwd=self.remote),
+                "repo": {"full_name": f"{owner}/{repo}"},
+            },
+            "base": {"ref": "main"},
+        }
+
     async def get_branch_head(self, owner: str, repo: str, branch: str) -> str:
         return git("rev-parse", f"refs/heads/{branch}", cwd=self.remote)
 
@@ -164,7 +175,7 @@ def make_service(
     workspace_python_venv_enabled: bool = False,
     workspace_python_venv_python: str | None = None,
 ) -> tuple[WorkspaceService, WorkspaceManager]:
-    settings = Settings(
+    settings_values = dict(
         allow_all_repos=allow_all_repos,
         allowed_repos=allowed_repos,
         workspace_root=str(tmp_path / "workspaces"),
@@ -173,8 +184,11 @@ def make_service(
         allow_workflow_edit=True,
         workspace_ttl_hours=workspace_ttl_hours,
         workspace_python_venv_enabled=workspace_python_venv_enabled,
-        workspace_python_venv_python=workspace_python_venv_python or sys.executable,
+        write_branch_prefix="gpt/",
     )
+    if workspace_python_venv_python is not None:
+        settings_values["workspace_python_venv_python"] = workspace_python_venv_python
+    settings = Settings(**settings_values)
     github = LocalGitHub(remote)
     policy = Policy(settings)
     audit = AuditStore(settings.audit_db_url)
@@ -185,6 +199,14 @@ def make_service(
 
 def run(coro):
     return asyncio.run(coro)
+
+
+def test_split_command_preserves_existing_interpreter_path_with_spaces(tmp_path: Path) -> None:
+    interpreter = tmp_path / "Python Folder" / "python.exe"
+    interpreter.parent.mkdir()
+    interpreter.write_bytes(b"")
+
+    assert split_command(str(interpreter)) == [str(interpreter)]
 
 
 def prepare_request(**kwargs) -> PrepareWorkspaceRequest:
@@ -766,11 +788,11 @@ def test_workspace_commit_and_push_updates_local_remote(tmp_path: Path):
     assert git("rev-parse", "gpt/task", cwd=remote) == response.new_head_sha
 
 
-def test_workspace_prepare_commit_and_push_allows_arbitrary_branch(tmp_path: Path):
+def test_workspace_prepare_from_source_pr_can_push_existing_unprefixed_branch(tmp_path: Path):
     remote, _ = make_local_repo(tmp_path)
     service, manager = make_service(tmp_path, remote)
 
-    prepared = run(service.prepare("acme", "demo", prepare_request(branch="feature/task")))
+    prepared = run(service.prepare("acme", "demo", prepare_request(source_pr_number=7)))
     repo_dir = manager.repo_dir(prepared.workspace_id)
     (repo_dir / "README.md").write_text("after feature\n", encoding="utf-8")
 
@@ -789,6 +811,18 @@ def test_workspace_prepare_commit_and_push_allows_arbitrary_branch(tmp_path: Pat
     assert response.new_head_sha != prepared.head_sha
     assert response.changed_files[0].path == "README.md"
     assert git("rev-parse", "feature/task", cwd=remote) == response.new_head_sha
+
+
+def test_workspace_prepare_rejects_direct_default_branch_write(tmp_path: Path):
+    remote, _ = make_local_repo(tmp_path)
+    service, _ = make_service(tmp_path, remote)
+    original = git("rev-parse", "main", cwd=remote)
+
+    with pytest.raises(ApiError) as exc:
+        run(service.prepare("acme", "demo", prepare_request(branch="main")))
+
+    assert exc.value.error_code == ErrorCode.BRANCH_NOT_ALLOWED
+    assert git("rev-parse", "main", cwd=remote) == original
 
 
 def test_workspace_commit_and_push_recovers_after_commit_succeeds_but_push_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
@@ -932,18 +966,30 @@ def test_prepare_work_branch_bootstraps_python_venv_without_committable_diff(tmp
     assert status.changed_files == []
 
 
-def test_prepare_arbitrary_branch_bootstraps_python_venv_without_prefix_check(tmp_path: Path):
+def test_prepare_work_branch_uses_running_python_by_default(tmp_path: Path):
     remote, _ = make_local_repo(tmp_path)
-    service, manager = make_service(tmp_path, remote, workspace_python_venv_enabled=True, workspace_python_venv_python=sys.executable)
+    service, manager = make_service(tmp_path, remote, workspace_python_venv_enabled=True)
 
-    prepared = run(service.prepare("acme", "demo", prepare_request(branch="feature/task", workspace_id="ws_python_feature")))
-    repo_dir = manager.repo_dir(prepared.workspace_id)
+    assert service.settings.workspace_python_venv_python == sys.executable
+    prepared = run(service.prepare("acme", "demo", prepare_request(branch="gpt/task")))
 
-    assert prepared.branch == "feature/task"
-    assert (repo_dir / ".venv" / "pyvenv.cfg").exists()
-    status = run(service.status("acme", "demo", prepared.workspace_id, WorkspaceStatusRequest()))
-    assert status.dirty is False
-    assert status.changed_files == []
+    assert (manager.repo_dir(prepared.workspace_id) / ".venv" / "pyvenv.cfg").exists()
+
+
+def test_prepare_unprefixed_branch_is_rejected_before_python_venv_bootstrap(tmp_path: Path):
+    remote, _ = make_local_repo(tmp_path)
+    service, manager = make_service(
+        tmp_path,
+        remote,
+        workspace_python_venv_enabled=True,
+        workspace_python_venv_python=sys.executable,
+    )
+
+    with pytest.raises(ApiError) as exc:
+        run(service.prepare("acme", "demo", prepare_request(branch="feature/task", workspace_id="ws_python_feature")))
+
+    assert exc.value.error_code == ErrorCode.BRANCH_NOT_ALLOWED
+    assert not any(manager.root.glob("ws_*"))
 
 
 def test_prepare_base_ref_does_not_bootstrap_python_venv(tmp_path: Path):

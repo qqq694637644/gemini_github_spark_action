@@ -69,6 +69,20 @@ class AcceptingTokenVerifier(TokenVerifier):
         )
 
 
+class ReadOnlyTokenVerifier(TokenVerifier):
+    async def verify_token(self, token: str) -> AccessToken | None:
+        if token != "read-only-token":
+            return None
+        return AccessToken(
+            token=token,
+            client_id="read-only-client",
+            subject="read-only-user",
+            scopes=[READ_SCOPE],
+            resource="http://testserver/mcp",
+            claims={"github_repositories": ["acme/demo"]},
+        )
+
+
 class CapturingAudit:
     def __init__(self) -> None:
         self.events: list[dict[str, Any]] = []
@@ -268,6 +282,76 @@ async def test_oauth_protected_resource_metadata_and_challenge(tmp_path: Path) -
     assert authenticated.status_code == 200
     assert authenticated.headers["mcp-session-id"]
     assert mcp_json(tool_error)["error"]["data"]["error_code"] == str(ErrorCode.WORKSPACE_NOT_FOUND)
+
+
+@pytest.mark.asyncio
+async def test_prepare_workspace_requires_write_scope_for_any_writable_target(tmp_path: Path) -> None:
+    settings = make_settings(
+        tmp_path,
+        mcp_auth_mode="oauth",
+        mcp_oauth_issuer_url="https://id.example.com",
+        mcp_oauth_required_scopes="github:read",
+    )
+    app = create_app(settings, token_verifier=ReadOnlyTokenVerifier(), enforce_single_instance=False)
+    initialize = {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "initialize",
+        "params": {
+            "protocolVersion": "2025-06-18",
+            "capabilities": {},
+            "clientInfo": {"name": "pytest", "version": "1.0"},
+        },
+    }
+    headers = {
+        "Authorization": "Bearer read-only-token",
+        "Accept": "application/json, text/event-stream",
+        "Content-Type": "application/json",
+    }
+
+    async with app.state.mcp.session_manager.run():
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+            initialized = await client.post("/mcp", headers=headers, json=initialize)
+            session_headers = {
+                **headers,
+                "MCP-Session-Id": initialized.headers["mcp-session-id"],
+                "MCP-Protocol-Version": "2025-06-18",
+            }
+            await client.post(
+                "/mcp",
+                headers=session_headers,
+                json={"jsonrpc": "2.0", "method": "notifications/initialized"},
+            )
+            response = await client.post(
+                "/mcp",
+                headers=session_headers,
+                json={
+                    "jsonrpc": "2.0",
+                    "id": 2,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "prepareWorkspace",
+                        "arguments": {
+                            "owner": "acme",
+                            "repo": "demo",
+                            "request": {
+                                "mode": "prepare_ref",
+                                "branch": "spark/test",
+                                "idempotency_key": "scope-check-001",
+                            },
+                        },
+                    },
+                },
+            )
+
+    await app.state.github.aclose()
+    app.state.audit.close()
+
+    error = mcp_json(response)["error"]
+    assert error["data"]["error_code"] == str(ErrorCode.AUTH_FAILED)
+    assert error["data"]["status_code"] == 403
+    assert error["data"]["details"]["missing_scopes"] == [WRITE_SCOPE]
 
 
 @pytest.mark.asyncio

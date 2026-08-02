@@ -263,7 +263,8 @@ def create_mcp_server(
     @mcp.tool(name="prepareWorkspace", title="Prepare Git workspace", annotations=LOCAL_WRITE)
     async def prepare_workspace(owner: str, repo: str, request: PrepareWorkspaceRequest) -> PrepareWorkspaceResponse:
         """Prepare a backend Git workspace. Branch creation requires github:write; read-only preparation requires github:read."""
-        scopes = {WRITE_SCOPE} if request.mode == "create_or_prepare_branch" else {READ_SCOPE}
+        writable = request.mode == "create_or_prepare_branch" or request.branch is not None or request.source_pr_number is not None
+        scopes = {WRITE_SCOPE} if writable else {READ_SCOPE}
         return await _invoke_tool(
             runtime,
             operation="prepareWorkspace",

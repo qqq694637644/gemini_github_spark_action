@@ -1001,7 +1001,11 @@ class WorkspaceService:
                 status_code=403,
                 details={"workspace_id": workspace_id, "branch": meta.branch},
             )
-        self.policy.assert_write_branch_allowed(request.branch)
+        self.policy.assert_write_branch_allowed(
+            request.branch,
+            allow_existing_pr_branch=meta.source_pr_number is not None,
+            default_branch=meta.default_branch,
+        )
         if request.branch != meta.branch:
             raise ApiError(ErrorCode.WORKSPACE_POLICY_VIOLATION, "Commit branch must match prepared workspace branch.", status_code=403, details={"workspace_branch": meta.branch, "request_branch": request.branch})
         scope = f"{owner}/{repo}:{workspace_id}:commit_and_push"
