@@ -56,3 +56,44 @@ jobs:
         run: python scripts/validate_mcp.py
       - name: Build production container
         run: docker build --tag gemini-spark-github-gateway:test .
+
+  windows-personal:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install package and test dependencies
+        shell: powershell
+        run: python -m pip install -e ".[dev]"
+      - name: Validate Windows PowerShell 5.1 scripts
+        shell: powershell
+        run: |
+          if ($PSVersionTable.PSVersion.Major -ne 5) {
+            throw "This job must run under Windows PowerShell 5.1."
+          }
+          foreach ($file in @(
+            'scripts/setup_windows_builtin_oauth.ps1',
+            'scripts/run_windows_builtin_oauth.ps1',
+            'scripts/check_windows_oauth.ps1'
+          )) {
+            $tokens = $null
+            $errors = $null
+            [void][System.Management.Automation.Language.Parser]::ParseFile(
+              (Resolve-Path $file),
+              [ref]$tokens,
+              [ref]$errors
+            )
+            if ($errors.Count -gt 0) {
+              foreach ($parseError in $errors) {
+                Write-Error ("{0} line {1}: {2}" -f $file, $parseError.Extent.StartLineNumber, $parseError.Message)
+              }
+              exit 1
+            }
+          }
+          python -c "from app.config.settings import Settings; assert Settings().workspace_shell == 'powershell.exe'"
+      - name: Run personal OAuth and Windows deployment tests
+        shell: powershell
+        run: pytest -q tests/test_builtin_oauth.py tests/test_models_settings_v2.py tests/test_windows_deployment.py

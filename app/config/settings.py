@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import re
 import sys
 from functools import lru_cache
@@ -118,7 +119,7 @@ class Settings(BaseSettings):
     workspace_max_changed_files: int = 200
     workspace_ttl_hours: int = 48
     workspace_allow_network: bool = False
-    workspace_shell: str = "pwsh"
+    workspace_shell: str = Field(default_factory=lambda: "powershell.exe" if os.name == "nt" else "pwsh")
     workspace_git_user_name: str = "gemini-spark-gateway"
     workspace_git_user_email: str = "gemini-spark-gateway@users.noreply.github.com"
     workspace_python_venv_enabled: bool = True
@@ -212,11 +213,6 @@ class Settings(BaseSettings):
                 raise ValueError(f"Built-in OAuth configuration is incomplete: {', '.join(missing)}")
             if not self.builtin_oauth_default_scope_list:
                 raise ValueError("MCP_BUILTIN_OAUTH_DEFAULT_SCOPES must contain at least one scope")
-            if self.app_env.lower() == "production":
-                if self.allow_all_repos:
-                    raise ValueError("production built-in OAuth requires ALLOW_ALL_REPOS=false")
-                if not self.allowed_repo_set:
-                    raise ValueError("production built-in OAuth requires at least one ALLOWED_REPOS entry")
             for redirect_uri in self.builtin_oauth_redirect_uri_list:
                 parsed_redirect = urlsplit(redirect_uri)
                 if parsed_redirect.scheme not in {"http", "https"} or not parsed_redirect.netloc or parsed_redirect.fragment:

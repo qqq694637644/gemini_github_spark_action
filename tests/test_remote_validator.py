@@ -64,7 +64,12 @@ def test_personal_template_uses_builtin_oauth_and_external_oauth_is_advanced() -
     assert "MCP_AUTH_MODE=builtin_oauth" in personal
     assert "MCP_BUILTIN_OAUTH_CLIENT_SECRET_HASH=" in personal
     assert "GITHUB_AUTH_MODE=pat" in personal
-    assert "ALLOW_ALL_REPOS=false" in personal
+    assert "ALLOW_ALL_REPOS=true" in personal
+    assert "ALLOWED_REPOS=" in personal
+    assert "ALLOW_WORKFLOW_EDIT=true" in personal
+    assert "ALLOW_DELETE_FILES=true" in personal
+    assert "WORKSPACE_ALLOW_NETWORK=true" in personal
+    assert "WORKSPACE_SHELL=powershell.exe" in personal
     assert "WRITE_BRANCH_PREFIX=spark/" in personal
     assert "MCP_AUTH_MODE=oauth" in oauth
     assert "GITHUB_AUTH_MODE=github_app" in oauth

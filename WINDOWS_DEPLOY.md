@@ -10,9 +10,9 @@ Windows 上需要：
 
 - Python 3.11 或更高版本
 - Git
-- PowerShell 7 (`pwsh`)
+- Windows PowerShell 5.1（系统自带）或 PowerShell 7
 - 已解析到此 Windows 主机的 HTTPS 域名
-- 一个仅授权目标仓库的 fine-grained GitHub PAT
+- 一个 GitHub PAT；网关默认不再额外限制仓库范围，实际可访问范围由 PAT 决定
 - 一个反向代理；本文给出原生 Windows Caddy 配置，不使用 Docker
 
 当前示例公网前缀：
@@ -29,7 +29,7 @@ https://githubaction.giize.com/gemini_mcp/mcp
 
 ## 2. 获取代码
 
-在 PowerShell 7 中执行：
+在当前 Windows PowerShell 中执行即可：
 
 ```powershell
 Set-Location C:\
@@ -65,14 +65,30 @@ git pull
 Set-ExecutionPolicy -Scope Process Bypass
 ```
 
-执行初始化。将 `<从Gemini复制的重定向URI>`、GitHub 用户名和仓库列表替换为真实值：
+执行初始化。将 `<从Gemini复制的重定向URI>` 和 GitHub 用户名替换为真实值：
 
 ```powershell
 .\scripts\setup_windows_builtin_oauth.ps1 `
   -PublicBaseUrl "https://githubaction.giize.com/gemini_mcp" `
   -RedirectUri "<从Gemini复制的重定向URI>" `
   -GitHubUsername "qqq694637644" `
-  -AllowedRepos "qqq694637644/gemini_github_spark_action"
+  -Force
+```
+
+默认行为：
+
+```text
+ALLOW_ALL_REPOS=true
+ALLOW_WORKFLOW_EDIT=true
+ALLOW_DELETE_FILES=true
+WORKSPACE_ALLOW_NETWORK=true
+WORKSPACE_SHELL=powershell.exe
+```
+
+也就是说，项目范围由 GitHub PAT 自己决定，网关不再重复限制。如果以后确实需要第二层项目限制，再可选添加：
+
+```powershell
+-AllowedRepos "owner/repo-a,owner/repo-b"
 ```
 
 脚本会安全提示输入：
@@ -105,7 +121,6 @@ Get-Content .\data\gemini-oauth-client.txt
   -PublicBaseUrl "https://githubaction.giize.com/gemini_mcp" `
   -RedirectUri "<从Gemini复制的重定向URI>" `
   -GitHubUsername "qqq694637644" `
-  -AllowedRepos "qqq694637644/gemini_github_spark_action" `
   -Force
 ```
 
@@ -238,7 +253,7 @@ https://githubaction.giize.com/gemini_mcp/oauth/authorize
 3. 生成一次性授权码
 4. 签发 RS256 JWT access token
 5. 签发并轮换 refresh token
-6. 把 `ALLOWED_REPOS` 写入 token 的 `github_repositories` claim
+6. 默认把通配符 `*` 写入 token 的仓库 claim，由 GitHub PAT 决定实际访问范围
 
 ## 9. 完整只读验收
 
@@ -290,19 +305,12 @@ Gemini 中填写的客户端 ID 或客户端密钥与 `data/gemini-oauth-client.
 
 ### 工具调用返回仓库未授权
 
-确认：
-
-```powershell
-Select-String -Path .env -Pattern '^ALLOWED_REPOS='
-```
-
-仓库必须使用 `owner/repo` 格式，且 PAT 本身也必须获准访问该仓库。
+个人默认配置不会限制项目范围。此时检查 GitHub PAT 是否实际拥有该仓库权限，以及 `.env` 中是否为 `ALLOW_ALL_REPOS=true`。
 
 ## 安全边界
 
 - 只能通过 HTTPS 公开。
-- GitHub PAT 只授权需要的仓库和权限。
-- `ALLOW_ALL_REPOS=false`。
+- GitHub PAT 决定可访问仓库；网关个人模式默认不重复设置项目白名单。
 - 不要公开 8005；只允许本机反向代理访问。
 - 不要把授权密码、客户端密钥或 PAT 发到聊天、日志或仓库。
 - 备份 `data/oauth-signing-key.pem` 和 `data/oauth.db`；更换签名密钥会使现有 access token 失效。

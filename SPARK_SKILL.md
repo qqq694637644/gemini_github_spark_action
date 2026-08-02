@@ -40,7 +40,7 @@ Always call `workspaceDiff` before publishing.
 
 Use `workspaceCommandStart` only for tests, builds, lint, type checks, dependency installation, diagnostics, and necessary scripts. Save its operation ID, then use `workspaceCommandGet` or `workspaceCommandLogs` until the command reaches `succeeded`, `failed`, `timed_out`, `canceled`, or `interrupted`. Use `workspaceCommandCancel` only to terminate a running command and `workspaceCommandList` to find known operations.
 
-Starting a command does not prove it passed. Use PowerShell 7 syntax. Enable network access only when policy permits and the task requires it. Do not use shell commands for GitHub publishing, pull-request management, workflow operations, secret handling, SSH/SCP, host enumeration, or remote deployment.
+Starting a command does not prove it passed. Use syntax supported by the configured PowerShell executable; the personal Windows setup defaults to Windows PowerShell 5.1. Enable network access only when policy permits and the task requires it. Do not use shell commands for GitHub publishing, pull-request management, workflow operations, secret handling, SSH/SCP, host enumeration, or remote deployment.
 
 Run validation directly related to the change. If validation cannot run, state why and describe the alternative checks performed.
 

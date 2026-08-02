@@ -1,3 +1,4 @@
+import os
 import sys
 
 import pytest
@@ -20,6 +21,7 @@ def test_workspace_python_settings_describe_current_bootstrap_surface(tmp_path):
     assert settings.workspace_python_venv_python == sys.executable
     assert settings.workspace_python_auto_gitignore is True
     assert settings.workspace_python_auto_activate is True
+    assert settings.workspace_shell == ("powershell.exe" if os.name == "nt" else "pwsh")
     assert {name for name in Settings.model_fields if name.startswith("workspace_python_")} == {
         "workspace_python_venv_enabled",
         "workspace_python_venv_dir",
@@ -87,7 +89,7 @@ def test_oauth_settings_reject_symmetric_access_token_algorithms(tmp_path):
         )
 
 
-def test_builtin_oauth_settings_preserve_public_prefix_and_validate_personal_boundaries(tmp_path):
+def test_builtin_oauth_settings_preserve_public_prefix_and_allow_pat_defined_repository_scope(tmp_path):
     settings = make_settings(
         tmp_path,
         app_env="production",
@@ -97,27 +99,16 @@ def test_builtin_oauth_settings_preserve_public_prefix_and_validate_personal_bou
         mcp_builtin_oauth_client_secret_hash="pbkdf2_sha256$600000$salt$digest",
         mcp_builtin_oauth_admin_password_hash="pbkdf2_sha256$600000$salt$digest",
         mcp_builtin_oauth_redirect_uris="https://gemini.google.com/oauth/callback",
-        allowed_repos="acme/demo",
-        allow_all_repos=False,
+        allowed_repos="",
+        allow_all_repos=True,
     )
 
     assert settings.oauth_issuer_url == "https://gateway.example.com/gemini_mcp"
     assert settings.mcp_resource_url == "https://gateway.example.com/gemini_mcp/mcp"
     assert settings.oauth_audience == "https://gateway.example.com/gemini_mcp/mcp"
     assert settings.builtin_oauth_redirect_uri_list == ["https://gemini.google.com/oauth/callback"]
-
-    with pytest.raises(ValidationError):
-        make_settings(
-            tmp_path,
-            app_env="production",
-            public_base_url="https://gateway.example.com/gemini_mcp",
-            mcp_auth_mode="builtin_oauth",
-            mcp_builtin_oauth_client_id="gemini-personal",
-            mcp_builtin_oauth_client_secret_hash="hash",
-            mcp_builtin_oauth_admin_password_hash="hash",
-            mcp_builtin_oauth_redirect_uris="https://gemini.google.com/oauth/callback",
-            allow_all_repos=True,
-        )
+    assert settings.allow_all_repos is True
+    assert settings.allowed_repo_set == set()
 
 
 def test_create_work_branch_request_has_current_base_ref_shape():

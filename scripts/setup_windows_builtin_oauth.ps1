@@ -8,8 +8,7 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$GitHubUsername,
 
-    [Parameter(Mandatory = $true)]
-    [string]$AllowedRepos,
+    [string]$AllowedRepos = "",
 
     [string]$ClientId = "gemini-spark-personal",
 
@@ -17,14 +16,8 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-if ($PSVersionTable.PSVersion.Major -lt 7) {
-    throw "PowerShell 7 or newer is required. Start this script with pwsh."
-}
 if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
     throw "Git is required and was not found in PATH."
-}
-if (-not (Get-Command pwsh -ErrorAction SilentlyContinue)) {
-    throw "PowerShell 7 executable 'pwsh' was not found in PATH."
 }
 $repoRoot = Split-Path -Parent $PSScriptRoot
 Set-Location $repoRoot
@@ -51,9 +44,11 @@ $arguments = @(
     "--public-base-url", $PublicBaseUrl,
     "--redirect-uri", $RedirectUri,
     "--github-username", $GitHubUsername,
-    "--allowed-repos", $AllowedRepos,
     "--client-id", $ClientId
 )
+if (-not [string]::IsNullOrWhiteSpace($AllowedRepos)) {
+    $arguments += @("--allowed-repos", $AllowedRepos)
+}
 if ($Force) {
     $arguments += "--force"
 }

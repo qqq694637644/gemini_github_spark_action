@@ -12,6 +12,8 @@ def test_windows_deployment_contains_no_docker_setup_run_and_check_commands() ->
     assert "https://githubaction.giize.com/gemini_mcp/mcp" in document
     assert "复制重定向 URI" in document
     assert "不需要 Docker" in document
+    assert "Windows PowerShell 5.1" in document
+    assert "-AllowedRepos" in document
 
 
 def test_windows_caddy_fragment_routes_required_well_known_and_prefixed_paths() -> None:
@@ -36,3 +38,8 @@ def test_windows_setup_scripts_never_embed_real_credentials() -> None:
     assert '"${currentIdentity}:(OI)(CI)F" /T /C' in setup_powershell
     assert '"${currentIdentity}:F"' in setup_powershell
     assert "--host 0.0.0.0" not in (ROOT / "scripts" / "run_windows_builtin_oauth.ps1").read_text(encoding="utf-8")
+    assert "PowerShell 7 or newer is required" not in setup_powershell
+    assert "Get-Command pwsh" not in setup_powershell
+    check_script = (ROOT / "scripts" / "check_windows_oauth.ps1").read_text(encoding="utf-8")
+    assert "-SkipHttpErrorCheck" not in check_script
+    assert "Invoke-WebRequestCompat" in check_script

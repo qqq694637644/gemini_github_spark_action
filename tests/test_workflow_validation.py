@@ -12,6 +12,16 @@ def test_validation_workflow_push_runs_only_for_main_branch() -> None:
     assert "- main" in push_block
 
 
+def test_validation_workflow_runs_personal_mode_on_windows_powershell_51() -> None:
+    workflow = Path(".github/workflows/mcp-validation.yml").read_text(encoding="utf-8")
+
+    assert "windows-personal:" in workflow
+    assert "runs-on: windows-latest" in workflow
+    assert "shell: powershell" in workflow
+    assert "Windows PowerShell 5.1" in workflow
+    assert "Settings().workspace_shell == 'powershell.exe'" in workflow
+
+
 def test_remote_validation_workflow_requires_an_explicit_endpoint_and_secret() -> None:
     workflow = Path(".github/workflows/remote-mcp-validation.yml").read_text(encoding="utf-8")
 

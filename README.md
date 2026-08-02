@@ -46,8 +46,8 @@ The MCP adapter calls the Python service layer directly; it does not make loopba
 
 - Python 3.11 or newer.
 - Git.
-- PowerShell 7 (`pwsh`) for workspace commands.
-- A narrowly scoped fine-grained PAT for personal use, or a GitHub App installation for multi-user use.
+- Windows PowerShell 5.1 or PowerShell 7 on Windows.
+- A GitHub PAT with the repository permissions you want for personal use, or a GitHub App installation for multi-user use.
 - For production: an HTTPS hostname. No external identity provider is required when `MCP_AUTH_MODE=builtin_oauth`.
 
 ## Install for development
@@ -101,9 +101,9 @@ Gemini custom Connected Apps require standard OAuth. The project therefore inclu
 - RS256 access tokens and JWKS
 - rotating persistent refresh tokens
 - `GITHUB_AUTH_MODE=pat`
-- `ALLOW_ALL_REPOS=false`
+- repository access follows the GitHub PAT by default (`ALLOW_ALL_REPOS=true`)
 - a `spark/` write-branch prefix
-- workflow editing, deletion, and workspace networking disabled by default
+- workflow editing, file deletion, and workspace networking enabled for personal use
 
 Use the Windows setup script rather than manually editing secrets:
 
@@ -112,8 +112,10 @@ Use the Windows setup script rather than manually editing secrets:
   -PublicBaseUrl "https://githubaction.giize.com/gemini_mcp" `
   -RedirectUri "<从Gemini复制的重定向URI>" `
   -GitHubUsername "qqq694637644" `
-  -AllowedRepos "qqq694637644/gemini_github_spark_action"
+  -Force
 ```
+
+`-AllowedRepos` is optional. When omitted, the gateway does not add another repository allowlist; the PAT itself determines which repositories can be accessed.
 
 The complete no-Docker Windows procedure, native Caddy routing, validation commands, and Gemini UI fields are documented in [`WINDOWS_DEPLOY.md`](WINDOWS_DEPLOY.md).
 
@@ -314,9 +316,8 @@ When a workspace contains the former `.gpt-artifacts` root and the new root does
 
 ## Security notes
 
-- For personal use, prefer a fine-grained PAT limited to the repositories in `ALLOWED_REPOS`; use a GitHub App for multi-user deployments.
-- Keep `ALLOW_ALL_REPOS=false` and configure `ALLOWED_REPOS` as a second server-side boundary.
-- Keep workflow editing and file deletion disabled unless explicitly required.
+- For personal use, the default setup lets the fine-grained PAT determine repository access. Use optional `-AllowedRepos` only when you explicitly want a second allowlist.
+- Personal setup enables workflow editing, file deletion, and workspace networking. The PAT and GitHub repository permissions remain authoritative.
 - Use short-lived OAuth access tokens and introspection when immediate revocation is required.
 - `workspaceCommitAndPush` requires an expected remote head SHA and never force-pushes.
 - Direct pushes to the default branch are rejected, even when the GitHub credential itself has that permission.

@@ -595,7 +595,11 @@ class BuiltinOAuthServer(TokenVerifier):
         status_code: int = 200,
     ) -> HTMLResponse:
         scopes = "、".join(html.escape(scope) for scope in payload["scopes"])
-        repositories = "、".join(html.escape(repo) for repo in sorted(self.settings.allowed_repo_set)) or "无"
+        repositories = (
+            "由 GitHub PAT 权限决定"
+            if self.settings.allow_all_repos
+            else "、".join(html.escape(repo) for repo in sorted(self.settings.allowed_repo_set)) or "无"
+        )
         error_html = f'<p class="error">{html.escape(error)}</p>' if error else ""
         body = f"""
 <!doctype html>

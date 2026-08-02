@@ -18,7 +18,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--public-base-url", required=True, help="Public prefix URL, e.g. https://host.example/gemini_mcp")
     parser.add_argument("--redirect-uri", action="append", required=True, help="Gemini redirect URI; repeat for multiple URIs")
     parser.add_argument("--github-username", required=True)
-    parser.add_argument("--allowed-repos", required=True, help="Comma-separated owner/repo allowlist")
+    parser.add_argument(
+        "--allowed-repos",
+        default="",
+        help="Optional comma-separated owner/repo allowlist. Omit to let the GitHub PAT define repository access.",
+    )
     parser.add_argument("--client-id", default="gemini-spark-personal")
     parser.add_argument("--env-file", default=".env")
     parser.add_argument("--force", action="store_true")
@@ -47,8 +51,9 @@ def main() -> None:
     public_base_url = validate_url(args.public_base_url, name="PUBLIC_BASE_URL")
     redirect_uris = [validate_url(value, name="redirect URI") for value in args.redirect_uri]
     allowed_repos = [item.strip() for item in args.allowed_repos.split(",") if item.strip()]
-    if not allowed_repos or any("/" not in item for item in allowed_repos):
-        raise SystemExit("--allowed-repos must contain one or more owner/repo values.")
+    if any("/" not in item for item in allowed_repos):
+        raise SystemExit("Each --allowed-repos value must use owner/repo format.")
+    allow_all_repos = not allowed_repos
 
     env_path = Path(args.env_file).resolve()
     if env_path.exists() and not args.force:
@@ -95,17 +100,17 @@ def main() -> None:
         "GITHUB_API_BASE_URL": "https://api.github.com",
         "GITHUB_API_VERSION": "2026-03-10",
         "GITHUB_USE_ENV_PROXY": "false",
-        "ALLOW_ALL_REPOS": "false",
+        "ALLOW_ALL_REPOS": "true" if allow_all_repos else "false",
         "ALLOWED_REPOS": ",".join(allowed_repos),
         "READ_BRANCH_ALLOWLIST": "*",
         "WRITE_BRANCH_PREFIX": "spark/",
         "DEFAULT_BASE_BRANCH": "main",
-        "ALLOW_WORKFLOW_EDIT": "false",
-        "ALLOW_DELETE_FILES": "false",
+        "ALLOW_WORKFLOW_EDIT": "true",
+        "ALLOW_DELETE_FILES": "true",
         "WORKSPACE_ROOT": "./data/workspaces",
         "WORKSPACE_OPERATION_ROOT": "./data/operations",
-        "WORKSPACE_ALLOW_NETWORK": "false",
-        "WORKSPACE_SHELL": "pwsh",
+        "WORKSPACE_ALLOW_NETWORK": "true",
+        "WORKSPACE_SHELL": "powershell.exe",
         "WORKSPACE_GIT_USER_NAME": "gemini-spark-gateway",
         "WORKSPACE_GIT_USER_EMAIL": "gemini-spark-gateway@users.noreply.github.com",
         "WORKSPACE_PYTHON_VENV_ENABLED": "true",

@@ -307,7 +307,7 @@ def test_windows_setup_writes_hashed_oauth_config_without_printing_secrets(
             public_base_url="https://gateway.example.com/gemini_mcp",
             redirect_uri=["https://gemini.google.com/oauth/callback"],
             github_username="octocat",
-            allowed_repos="octocat/demo",
+            allowed_repos="",
             client_id="gemini-personal",
             env_file=".env",
             force=False,
@@ -324,6 +324,12 @@ def test_windows_setup_writes_hashed_oauth_config_without_printing_secrets(
     assert 'MCP_AUTH_MODE="builtin_oauth"' in env_text
     assert 'PUBLIC_BASE_URL="https://gateway.example.com/gemini_mcp"' in env_text
     assert 'MCP_OAUTH_AUDIENCE="https://gateway.example.com/gemini_mcp/mcp"' in env_text
+    assert 'ALLOW_ALL_REPOS="true"' in env_text
+    assert 'ALLOWED_REPOS=""' in env_text
+    assert 'ALLOW_WORKFLOW_EDIT="true"' in env_text
+    assert 'ALLOW_DELETE_FILES="true"' in env_text
+    assert 'WORKSPACE_ALLOW_NETWORK="true"' in env_text
+    assert 'WORKSPACE_SHELL="powershell.exe"' in env_text
     assert "github-token-value-with-enough-length" in env_text
     assert "approval-password-strong" not in env_text
     assert "OAuth client secret:" in credentials
@@ -333,3 +339,31 @@ def test_windows_setup_writes_hashed_oauth_config_without_printing_secrets(
     assert client_secret not in output
     assert "github-token-value-with-enough-length" not in output
     assert (tmp_path / "data" / "oauth-signing-key.pem").is_file()
+
+
+def test_windows_setup_optional_repository_allowlist_still_works(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        setup_windows_builtin_oauth,
+        "parse_args",
+        lambda: Namespace(
+            public_base_url="https://gateway.example.com/gemini_mcp",
+            redirect_uri=["https://gemini.google.com/oauth/callback"],
+            github_username="octocat",
+            allowed_repos="octocat/demo,octocat/other",
+            client_id="gemini-personal",
+            env_file=".env",
+            force=False,
+        ),
+    )
+    answers = iter(["github-token-value-with-enough-length", "approval-password-strong", "approval-password-strong"])
+    monkeypatch.setattr(setup_windows_builtin_oauth.getpass, "getpass", lambda prompt: next(answers))
+
+    setup_windows_builtin_oauth.main()
+
+    env_text = (tmp_path / ".env").read_text(encoding="utf-8")
+    assert 'ALLOW_ALL_REPOS="false"' in env_text
+    assert 'ALLOWED_REPOS="octocat/demo,octocat/other"' in env_text
