@@ -106,6 +106,14 @@ data/gemini-oauth-client.txt
 .venv/
 ```
 
+个人模式默认保留 Windows 原有文件权限，不主动重写 ACL。只有明确需要限制为当前用户、SYSTEM 和 Administrators 时，才添加 `-HardenAcl`。
+
+旧版本脚本若造成 `oauth-signing-key.pem` 的 `PermissionError`，以管理员 PowerShell 执行：
+
+```powershell
+.\scripts\repair_windows_oauth_acl.ps1
+```
+
 查看 Gemini 需要填写的客户端 ID 和客户端密钥：
 
 ```powershell

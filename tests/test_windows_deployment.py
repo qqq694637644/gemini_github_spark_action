@@ -33,13 +33,22 @@ def test_windows_setup_scripts_never_embed_real_credentials() -> None:
 
     assert "getpass.getpass" in setup_python
     assert "OAuth client secret: saved only" in setup_python
+    assert "[switch]$HardenAcl" in setup_powershell
+    assert "if ($HardenAcl)" in setup_powershell
     assert "icacls.exe" in setup_powershell
-    assert "WindowsIdentity]::GetCurrent().Name" in setup_powershell
-    assert '"${currentIdentity}:(OI)(CI)F" /T /C' in setup_powershell
-    assert '"${currentIdentity}:F"' in setup_powershell
     assert "--host 0.0.0.0" not in (ROOT / "scripts" / "run_windows_builtin_oauth.ps1").read_text(encoding="utf-8")
     assert "PowerShell 7 or newer is required" not in setup_powershell
     assert "Get-Command pwsh" not in setup_powershell
     check_script = (ROOT / "scripts" / "check_windows_oauth.ps1").read_text(encoding="utf-8")
     assert "-SkipHttpErrorCheck" not in check_script
     assert "Invoke-WebRequestCompat" in check_script
+
+
+def test_windows_acl_repair_script_uses_sid_and_verifies_key_readability() -> None:
+    script = (ROOT / "scripts" / "repair_windows_oauth_acl.ps1").read_text(encoding="utf-8")
+
+    assert "WindowsIdentity]::GetCurrent().User.Value" in script
+    assert "takeown.exe" in script
+    assert "*S-1-5-18" in script
+    assert "*S-1-5-32-544" in script
+    assert "File]::OpenRead" in script

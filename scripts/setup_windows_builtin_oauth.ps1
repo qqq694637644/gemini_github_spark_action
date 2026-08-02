@@ -12,6 +12,8 @@ param(
 
     [string]$ClientId = "gemini-spark-personal",
 
+    [switch]$HardenAcl,
+
     [switch]$Force
 )
 
@@ -56,18 +58,27 @@ if ($Force) {
 & $venvPython @arguments
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-$currentIdentity = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
-foreach ($sensitivePath in @((Join-Path $repoRoot "data"), (Join-Path $repoRoot ".env"))) {
-    try {
-        if (Test-Path $sensitivePath -PathType Container) {
-            & icacls.exe $sensitivePath /inheritance:r /grant:r "${currentIdentity}:(OI)(CI)F" /T /C | Out-Null
-        } else {
-            & icacls.exe $sensitivePath /inheritance:r /grant:r "${currentIdentity}:F" | Out-Null
-        }
-        if ($LASTEXITCODE -ne 0) { throw "icacls exited with code $LASTEXITCODE" }
-    } catch {
-        Write-Warning "Could not tighten ACL for $sensitivePath automatically: $($_.Exception.Message)"
-    }
+if ($HardenAcl) {
+    $currentSid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+    $dataPath = Join-Path $repoRoot "data"
+    $envPath = Join-Path $repoRoot ".env"
+
+    & icacls.exe $dataPath /inheritance:r /grant:r `
+        "*$($currentSid):(OI)(CI)F" `
+        "*S-1-5-18:(OI)(CI)F" `
+        "*S-1-5-32-544:(OI)(CI)F" `
+        /T /C | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "Failed to apply ACLs to $dataPath" }
+
+    & icacls.exe $envPath /inheritance:r /grant:r `
+        "*$($currentSid):F" `
+        "*S-1-5-18:F" `
+        "*S-1-5-32-544:F" | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "Failed to apply ACLs to $envPath" }
+
+    $keyPath = Join-Path $dataPath "oauth-signing-key.pem"
+    $stream = [System.IO.File]::OpenRead($keyPath)
+    $stream.Dispose()
 }
 
 Write-Host ""
