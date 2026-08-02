@@ -1,6 +1,6 @@
 # Gemini Spark GitHub MCP Gateway
 
-A workspace-first GitHub maintenance backend for Gemini Spark custom Connected Apps. Personal deployments use static Bearer authentication plus a fine-grained PAT by default; OAuth and GitHub App support remain available for multi-user deployments.
+A workspace-first GitHub maintenance backend for Gemini Spark custom Connected Apps. Personal Windows deployments can use the built-in OAuth authorization server plus a fine-grained PAT; external OAuth and GitHub App support remain available for multi-user deployments.
 
 The service exposes repository inspection, controlled edits, pull-request operations, GitHub Actions status/log/artifact operations, and guarded publishing through Model Context Protocol (MCP) Streamable HTTP at `/mcp`.
 
@@ -11,10 +11,10 @@ This repository is MCP-only. The former GPT Actions REST/OpenAPI surface, prompt
 - 32 MCP-native tools for workspaces, pull requests, CI, workflow operations, logs, and artifacts.
 - Separate asynchronous command tools: start, get, logs, cancel, and list.
 - MCP Streamable HTTP sessions with exact `/mcp` routing and explicit termination support.
-- Personal-first static Bearer authentication, with optional OAuth 2.1 resource-server metadata and discovery challenges.
+- Built-in personal OAuth authorization server with Authorization Code + PKCE, JWT/JWKS, refresh-token rotation, and revocation.
 - JWT/JWKS validation or RFC 7662 token introspection through an external identity provider.
 - Per-tool scopes and per-user repository authorization claims.
-- Optional OAuth/JWT/introspection mode for multi-user deployments.
+- Static Bearer mode for local diagnostics and external OAuth/JWT/introspection mode for multi-user deployments.
 - MCP-native structured error data preserving gateway error codes, suggestions, and details.
 - Actor-aware audit events without storing access tokens.
 - `.spark-artifacts` storage with a safe one-time migration from `.gpt-artifacts`.
@@ -48,7 +48,7 @@ The MCP adapter calls the Python service layer directly; it does not make loopba
 - Git.
 - PowerShell 7 (`pwsh`) for workspace commands.
 - A narrowly scoped fine-grained PAT for personal use, or a GitHub App installation for multi-user use.
-- For production: an HTTPS hostname. An OAuth 2.1/OIDC provider is needed only for OAuth mode.
+- For production: an HTTPS hostname. No external identity provider is required when `MCP_AUTH_MODE=builtin_oauth`.
 
 ## Install for development
 
@@ -58,7 +58,7 @@ py -3.11 -m venv .venv
 python -m pip install -e '.[dev]'
 ```
 
-Use static Bearer mode locally:
+Use static Bearer mode only for local diagnostics or non-Gemini MCP clients:
 
 ```powershell
 $env:APP_ENV = 'development'
@@ -90,24 +90,32 @@ Endpoints:
 
 There are no REST repository routes, Swagger UI, or exported OpenAPI action schemas.
 
-## Personal production configuration
+## Windows personal production configuration
 
-`.env.example` is the recommended personal deployment template. It uses:
+Gemini custom Connected Apps require standard OAuth. The project therefore includes a single-process personal authorization server for Windows. It provides:
 
-- `MCP_AUTH_MODE=static_bearer`
-- a long random `GATEWAY_ACTION_SECRET`
+- `MCP_AUTH_MODE=builtin_oauth`
+- Authorization Code flow with mandatory PKCE S256
+- a fixed client ID and hashed client secret
+- a separate hashed personal approval password
+- RS256 access tokens and JWKS
+- rotating persistent refresh tokens
 - `GITHUB_AUTH_MODE=pat`
 - `ALLOW_ALL_REPOS=false`
 - a `spark/` write-branch prefix
 - workflow editing, deletion, and workspace networking disabled by default
 
-Copy it before container deployment:
+Use the Windows setup script rather than manually editing secrets:
 
 ```powershell
-Copy-Item .env.example .env
+.\scripts\setup_windows_builtin_oauth.ps1 `
+  -PublicBaseUrl "https://githubaction.giize.com/gemini_mcp" `
+  -RedirectUri "<从Gemini复制的重定向URI>" `
+  -GitHubUsername "qqq694637644" `
+  -AllowedRepos "qqq694637644/gemini_github_spark_action"
 ```
 
-Use a fine-grained PAT that is authorized only for repositories listed in `ALLOWED_REPOS`. Static Bearer grants access to every MCP tool, so HTTPS, a strong random secret, repository allowlisting, and default-branch write protection are all required.
+The complete no-Docker Windows procedure, native Caddy routing, validation commands, and Gemini UI fields are documented in [`WINDOWS_DEPLOY.md`](WINDOWS_DEPLOY.md).
 
 ## Advanced OAuth configuration
 
@@ -259,13 +267,13 @@ docker compose -f deploy/docker-compose.example.yml up --build -d
 ## Connect Gemini Spark
 
 1. Deploy the gateway at a trusted HTTPS hostname.
-2. For personal mode, configure the static Bearer credential. For OAuth mode, configure the external identity provider and required scopes.
+2. For personal Windows mode, run `setup_windows_builtin_oauth.ps1`; for multi-user mode, configure the external identity provider and required scopes.
 3. Add the HTTPS MCP URL, for example `https://gateway.example.com/mcp`, as a Gemini Spark custom Connected App.
-4. Configure the Bearer credential or complete the provider authorization flow.
+4. Enter the generated OAuth client ID/client secret, then complete the browser approval flow.
 5. Create a Spark Skill from `SPARK_SKILL.md`.
 6. Start with a read-only repository task, then validate write, PR, and CI operations using a non-production repository.
 
-The repository cannot create the external hostname, identity-provider tenant/client, GitHub App installation, or Gemini account configuration on its own; those are environment-owned deployment inputs.
+The repository cannot create the external hostname, modify an unrelated reverse proxy automatically, or operate the Gemini account UI; those remain environment-owned deployment inputs.
 
 ## Validation
 
@@ -274,7 +282,7 @@ Local validation:
 ```powershell
 pytest -q
 ruff check app tests scripts
-mypy app/auth/mcp.py app/mcp/server.py app/main.py
+mypy app/auth/builtin.py app/auth/mcp.py app/mcp/server.py app/main.py
 python scripts/validate_mcp.py
 docker build -t gemini-spark-github-gateway:test .
 ```

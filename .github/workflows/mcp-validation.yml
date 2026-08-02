@@ -25,7 +25,31 @@ jobs:
       - name: Run lint
         run: ruff check app tests scripts
       - name: Run MCP and authentication type checks
-        run: mypy app/auth/mcp.py app/mcp/server.py app/main.py
+        run: mypy app/auth/builtin.py app/auth/mcp.py app/mcp/server.py app/main.py scripts/setup_windows_builtin_oauth.py
+      - name: Validate Windows PowerShell scripts
+        shell: pwsh
+        run: |
+          $failed = $false
+          foreach ($file in @(
+            'scripts/setup_windows_builtin_oauth.ps1',
+            'scripts/run_windows_builtin_oauth.ps1',
+            'scripts/check_windows_oauth.ps1'
+          )) {
+            $tokens = $null
+            $errors = $null
+            [void][System.Management.Automation.Language.Parser]::ParseFile(
+              (Resolve-Path $file),
+              [ref]$tokens,
+              [ref]$errors
+            )
+            if ($errors.Count -gt 0) {
+              $failed = $true
+              foreach ($parseError in $errors) {
+                Write-Error ("{0} line {1}: {2}" -f $file, $parseError.Extent.StartLineNumber, $parseError.Message)
+              }
+            }
+          }
+          if ($failed) { exit 1 }
       - name: Run unit and local Git integration tests
         run: pytest -q
       - name: Validate MCP tool surface

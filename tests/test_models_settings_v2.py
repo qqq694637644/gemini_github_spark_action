@@ -48,8 +48,8 @@ def test_oauth_settings_derive_the_mcp_resource_and_scope_lists(tmp_path):
     )
 
     assert settings.mcp_path == "/mcp"
-    assert settings.mcp_resource_url == "https://gateway.example.com/mcp"
-    assert settings.oauth_audience == "https://gateway.example.com/mcp"
+    assert settings.mcp_resource_url == "https://gateway.example.com/root/mcp"
+    assert settings.oauth_audience == "https://gateway.example.com/root/mcp"
     assert settings.oauth_required_scope_list == ["github:read", "github:write"]
     assert settings.oauth_algorithm_list == ["RS256", "ES256"]
 
@@ -84,6 +84,39 @@ def test_oauth_settings_reject_symmetric_access_token_algorithms(tmp_path):
             mcp_auth_mode="oauth",
             mcp_oauth_issuer_url="https://id.example.com",
             mcp_oauth_algorithms="HS256",
+        )
+
+
+def test_builtin_oauth_settings_preserve_public_prefix_and_validate_personal_boundaries(tmp_path):
+    settings = make_settings(
+        tmp_path,
+        app_env="production",
+        public_base_url="https://gateway.example.com/gemini_mcp",
+        mcp_auth_mode="builtin_oauth",
+        mcp_builtin_oauth_client_id="gemini-personal",
+        mcp_builtin_oauth_client_secret_hash="pbkdf2_sha256$600000$salt$digest",
+        mcp_builtin_oauth_admin_password_hash="pbkdf2_sha256$600000$salt$digest",
+        mcp_builtin_oauth_redirect_uris="https://gemini.google.com/oauth/callback",
+        allowed_repos="acme/demo",
+        allow_all_repos=False,
+    )
+
+    assert settings.oauth_issuer_url == "https://gateway.example.com/gemini_mcp"
+    assert settings.mcp_resource_url == "https://gateway.example.com/gemini_mcp/mcp"
+    assert settings.oauth_audience == "https://gateway.example.com/gemini_mcp/mcp"
+    assert settings.builtin_oauth_redirect_uri_list == ["https://gemini.google.com/oauth/callback"]
+
+    with pytest.raises(ValidationError):
+        make_settings(
+            tmp_path,
+            app_env="production",
+            public_base_url="https://gateway.example.com/gemini_mcp",
+            mcp_auth_mode="builtin_oauth",
+            mcp_builtin_oauth_client_id="gemini-personal",
+            mcp_builtin_oauth_client_secret_hash="hash",
+            mcp_builtin_oauth_admin_password_hash="hash",
+            mcp_builtin_oauth_redirect_uris="https://gemini.google.com/oauth/callback",
+            allow_all_repos=True,
         )
 
 

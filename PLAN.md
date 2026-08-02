@@ -13,7 +13,8 @@
 - Added Docker Compose and Caddy HTTPS reverse-proxy examples.
 - Added a remote MCP acceptance validator for health, initialization, protocol negotiation, tool discovery, session termination, and optional real read-only GitHub/workspace tool calls.
 - Added a manually dispatched remote-validation workflow using a repository secret.
-- Changed the default deployment template to personal static Bearer + fine-grained PAT, with the OAuth/GitHub App template under `deploy/`.
+- Added a Windows-native, no-Docker personal OAuth authorization server with one-command setup, fixed-client credentials, PKCE, JWT/JWKS, refresh-token rotation, revocation, and a fine-grained PAT backend.
+- Kept external OAuth/GitHub App configuration under `deploy/` for multi-user deployments.
 - Documented the exact Gemini Spark Connected App and Skill setup sequence.
 
 Environment-owned execution remains necessary after review: provision the HTTPS hostname, GitHub credential, acceptance token, and Gemini Spark Connected App. An identity-provider application and GitHub App installation are needed only when the advanced multi-user mode is selected. These external resources cannot be created by repository code.
@@ -29,12 +30,13 @@ Environment-owned execution remains necessary after review: provision the HTTPS 
 ## Stage 4: Production authorization — complete
 
 - Added OAuth resource-server metadata and discovery challenges through the MCP SDK.
+- Added a built-in single-user OAuth Authorization Code server for Gemini custom Connected Apps on Windows.
 - Added JWT/JWKS validation with issuer, audience, algorithm, lifetime, and clock-skew checks.
 - Added RFC 7662 introspection for opaque tokens and immediate revocation enforcement.
 - Added configurable baseline OAuth scopes plus per-tool scopes: `github:read`, `github:write`, `github:workflow`, and `github:merge`.
 - Added configurable per-user repository authorization claims.
 - Added authenticated actor/client/scopes to MCP audit metadata without storing access tokens.
-- Retained static Bearer mode only as an explicit local/single-user fallback.
+- Retained static Bearer mode only as an explicit local diagnostic/non-Gemini fallback.
 
 ## Stage 5: Compatibility retirement — complete
 

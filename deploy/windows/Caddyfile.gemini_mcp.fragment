@@ -1,0 +1,26 @@
+# Insert these handlers near the top of the existing
+# githubaction.giize.com site block, before any catch-all handle/respond.
+# The public prefix is /gemini_mcp and Uvicorn listens on 127.0.0.1:8005.
+
+@oauthProtectedResource path /.well-known/oauth-protected-resource/gemini_mcp/mcp
+handle @oauthProtectedResource {
+    rewrite * /.well-known/oauth-protected-resource/mcp
+    reverse_proxy 127.0.0.1:8005
+}
+
+@oauthAuthorizationServer path /.well-known/oauth-authorization-server/gemini_mcp
+handle @oauthAuthorizationServer {
+    rewrite * /.well-known/oauth-authorization-server
+    reverse_proxy 127.0.0.1:8005
+}
+
+# This strips /gemini_mcp before forwarding:
+# /gemini_mcp/mcp                         -> /mcp
+# /gemini_mcp/oauth/authorize             -> /oauth/authorize
+# /gemini_mcp/oauth/token                 -> /oauth/token
+# /gemini_mcp/oauth/jwks                  -> /oauth/jwks
+handle_path /gemini_mcp/* {
+    reverse_proxy 127.0.0.1:8005 {
+        flush_interval -1
+    }
+}

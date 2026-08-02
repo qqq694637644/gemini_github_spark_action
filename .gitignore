@@ -39,6 +39,7 @@ Thumbs.db
 
 # 项目运行时数据
 audit.db
+data/
 .tmp-manual-tests/
 .spark-artifacts/
 # Legacy workspace artifact root retained only for safe migration.

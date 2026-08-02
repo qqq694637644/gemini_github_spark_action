@@ -121,7 +121,10 @@ def create_app(
 
     register_exception_handlers(app)
 
-    if settings.mcp_auth_mode == "oauth":
+    if auth_components.builtin_oauth_server is not None:
+        app.include_router(auth_components.builtin_oauth_server.router())
+
+    if settings.mcp_auth_mode != "static_bearer":
         protected_resource_path = f"/.well-known/oauth-protected-resource{settings.mcp_path}"
 
         @app.get(protected_resource_path, include_in_schema=False)
@@ -129,7 +132,7 @@ def create_app(
             return JSONResponse(
                 {
                     "resource": settings.mcp_resource_url,
-                    "authorization_servers": [settings.mcp_oauth_issuer_url],
+                    "authorization_servers": [settings.oauth_issuer_url],
                     "scopes_supported": list(ALL_SCOPES),
                     "bearer_methods_supported": ["header"],
                 }

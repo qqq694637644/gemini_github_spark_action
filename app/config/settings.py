@@ -4,7 +4,7 @@ import re
 import sys
 from functools import lru_cache
 from typing import Literal
-from urllib.parse import urljoin, urlsplit
+from urllib.parse import urlsplit
 
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -49,7 +49,7 @@ class Settings(BaseSettings):
 
     app_env: str = "development"
     public_base_url: str = "http://localhost:8000"
-    mcp_auth_mode: Literal["static_bearer", "oauth"] = "static_bearer"
+    mcp_auth_mode: Literal["static_bearer", "builtin_oauth", "oauth"] = "static_bearer"
     gateway_action_secret: str = ""
     mcp_path: str = "/mcp"
     mcp_allowed_hosts: str = ""
@@ -67,6 +67,17 @@ class Settings(BaseSettings):
     mcp_oauth_http_timeout_seconds: float = Field(default=10.0, gt=0, le=120)
     mcp_oauth_jwks_cache_seconds: int = Field(default=300, ge=1, le=86_400)
     mcp_oauth_clock_skew_seconds: int = Field(default=30, ge=0, le=300)
+    mcp_builtin_oauth_client_id: str = ""
+    mcp_builtin_oauth_client_secret_hash: str = ""
+    mcp_builtin_oauth_admin_password_hash: str = ""
+    mcp_builtin_oauth_redirect_uris: str = ""
+    mcp_builtin_oauth_subject: str = "personal-user"
+    mcp_builtin_oauth_key_path: str = "./data/oauth-signing-key.pem"
+    mcp_builtin_oauth_db_path: str = "./data/oauth.db"
+    mcp_builtin_oauth_default_scopes: str = "github:read,github:write,github:workflow,github:merge"
+    mcp_builtin_oauth_code_ttl_seconds: int = Field(default=300, ge=60, le=900)
+    mcp_builtin_oauth_access_token_ttl_seconds: int = Field(default=3600, ge=300, le=86_400)
+    mcp_builtin_oauth_refresh_token_ttl_seconds: int = Field(default=2_592_000, ge=3600, le=31_536_000)
 
     github_auth_mode: Literal["pat", "github_app"] = "pat"
     github_api_base_url: str = "https://api.github.com"
@@ -186,6 +197,34 @@ class Settings(BaseSettings):
                 raise ValueError("GATEWAY_ACTION_SECRET is required for production static_bearer mode")
             return self
 
+        if self.mcp_auth_mode == "builtin_oauth":
+            missing = [
+                name
+                for name, value in (
+                    ("MCP_BUILTIN_OAUTH_CLIENT_ID", self.mcp_builtin_oauth_client_id),
+                    ("MCP_BUILTIN_OAUTH_CLIENT_SECRET_HASH", self.mcp_builtin_oauth_client_secret_hash),
+                    ("MCP_BUILTIN_OAUTH_ADMIN_PASSWORD_HASH", self.mcp_builtin_oauth_admin_password_hash),
+                    ("MCP_BUILTIN_OAUTH_REDIRECT_URIS", self.mcp_builtin_oauth_redirect_uris),
+                )
+                if not value.strip()
+            ]
+            if missing:
+                raise ValueError(f"Built-in OAuth configuration is incomplete: {', '.join(missing)}")
+            if not self.builtin_oauth_default_scope_list:
+                raise ValueError("MCP_BUILTIN_OAUTH_DEFAULT_SCOPES must contain at least one scope")
+            if self.app_env.lower() == "production":
+                if self.allow_all_repos:
+                    raise ValueError("production built-in OAuth requires ALLOW_ALL_REPOS=false")
+                if not self.allowed_repo_set:
+                    raise ValueError("production built-in OAuth requires at least one ALLOWED_REPOS entry")
+            for redirect_uri in self.builtin_oauth_redirect_uri_list:
+                parsed_redirect = urlsplit(redirect_uri)
+                if parsed_redirect.scheme not in {"http", "https"} or not parsed_redirect.netloc or parsed_redirect.fragment:
+                    raise ValueError("Each MCP_BUILTIN_OAUTH_REDIRECT_URIS value must be an absolute HTTP(S) URL")
+                if self.app_env.lower() == "production" and parsed_redirect.scheme != "https":
+                    raise ValueError("production built-in OAuth redirect URIs must use HTTPS")
+            return self
+
         issuer = urlsplit(self.mcp_oauth_issuer_url)
         if issuer.scheme not in {"http", "https"} or not issuer.netloc or issuer.query or issuer.fragment:
             raise ValueError("MCP_OAUTH_ISSUER_URL must be an absolute HTTP(S) URL without query or fragment")
@@ -229,7 +268,7 @@ class Settings(BaseSettings):
 
     @property
     def mcp_resource_url(self) -> str:
-        return urljoin(f"{self.public_base_url.rstrip('/')}/", self.mcp_path)
+        return f"{self.public_base_url.rstrip('/')}{self.mcp_path}"
 
     @property
     def oauth_required_scope_list(self) -> list[str]:
@@ -242,6 +281,20 @@ class Settings(BaseSettings):
     @property
     def oauth_audience(self) -> str:
         return self.mcp_oauth_audience.strip() or self.mcp_resource_url
+
+    @property
+    def oauth_issuer_url(self) -> str:
+        if self.mcp_auth_mode == "builtin_oauth":
+            return self.public_base_url.rstrip("/")
+        return self.mcp_oauth_issuer_url.rstrip("/")
+
+    @property
+    def builtin_oauth_redirect_uri_list(self) -> list[str]:
+        return parse_csv(self.mcp_builtin_oauth_redirect_uris)
+
+    @property
+    def builtin_oauth_default_scope_list(self) -> list[str]:
+        return parse_csv(self.mcp_builtin_oauth_default_scopes)
 
     @property
     def allowed_repo_set(self) -> set[str]:

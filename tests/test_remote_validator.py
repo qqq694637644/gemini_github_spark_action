@@ -56,12 +56,13 @@ def test_read_only_acceptance_environment_requires_owner_and_repo_together(monke
         validate_remote_mcp.read_only_acceptance_config()
 
 
-def test_personal_template_is_default_and_oauth_is_advanced() -> None:
+def test_personal_template_uses_builtin_oauth_and_external_oauth_is_advanced() -> None:
     root = Path(__file__).parents[1]
     personal = (root / ".env.example").read_text(encoding="utf-8")
     oauth = (root / "deploy" / "oauth.env.example").read_text(encoding="utf-8")
 
-    assert "MCP_AUTH_MODE=static_bearer" in personal
+    assert "MCP_AUTH_MODE=builtin_oauth" in personal
+    assert "MCP_BUILTIN_OAUTH_CLIENT_SECRET_HASH=" in personal
     assert "GITHUB_AUTH_MODE=pat" in personal
     assert "ALLOW_ALL_REPOS=false" in personal
     assert "WRITE_BRANCH_PREFIX=spark/" in personal

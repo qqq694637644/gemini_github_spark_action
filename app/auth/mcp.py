@@ -15,6 +15,7 @@ from mcp.server.auth.provider import AccessToken, TokenVerifier
 from mcp.server.auth.settings import AuthSettings
 from pydantic import AnyHttpUrl
 
+from app.auth.builtin import BuiltinOAuthServer
 from app.config.settings import Settings
 from app.errors import ApiError, ErrorCode
 
@@ -49,6 +50,7 @@ class McpAuthComponents:
     server_token_verifier: TokenVerifier | None
     auth_settings: AuthSettings | None
     static_token_verifier: TokenVerifier | None
+    builtin_oauth_server: BuiltinOAuthServer | None
 
 
 class StaticBearerTokenVerifier(TokenVerifier):
@@ -149,7 +151,7 @@ class OAuthTokenVerifier(TokenVerifier):
             key=signing_key,
             algorithms=self.settings.oauth_algorithm_list,
             audience=self.settings.oauth_audience,
-            issuer=self.settings.mcp_oauth_issuer_url,
+            issuer=self.settings.oauth_issuer_url,
             leeway=self.settings.mcp_oauth_clock_skew_seconds,
             options={"require": ["exp", "iat", "iss", "aud"]},
         )
@@ -204,7 +206,7 @@ class OAuthTokenVerifier(TokenVerifier):
         raise ValueError(f"Authorization server discovery failed: {failures}")
 
     def _issuer_matches(self, issuer: Any) -> bool:
-        return issuer is None or str(issuer).rstrip("/") == self.settings.mcp_oauth_issuer_url.rstrip("/")
+        return issuer is None or str(issuer).rstrip("/") == self.settings.oauth_issuer_url
 
     def _access_token(self, token: str, claims: dict[str, Any]) -> AccessToken:
         client_id = str(claims.get("client_id") or claims.get("azp") or claims.get("cid") or "unknown-client")
@@ -238,6 +240,20 @@ def build_mcp_auth(
             server_token_verifier=None,
             auth_settings=None,
             static_token_verifier=token_verifier or StaticBearerTokenVerifier(settings.static_bearer_tokens),
+            builtin_oauth_server=None,
+        )
+    if settings.mcp_auth_mode == "builtin_oauth":
+        server = BuiltinOAuthServer(settings)
+        auth = AuthSettings(
+            issuer_url=AnyHttpUrl(settings.oauth_issuer_url),
+            resource_server_url=AnyHttpUrl(settings.mcp_resource_url),
+            required_scopes=[],
+        )
+        return McpAuthComponents(
+            server_token_verifier=server,
+            auth_settings=auth,
+            static_token_verifier=None,
+            builtin_oauth_server=server,
         )
     if not settings.mcp_oauth_issuer_url.strip():
         raise ValueError("MCP_OAUTH_ISSUER_URL is required when MCP_AUTH_MODE=oauth")
@@ -254,6 +270,7 @@ def build_mcp_auth(
         server_token_verifier=verifier,
         auth_settings=auth,
         static_token_verifier=None,
+        builtin_oauth_server=None,
     )
 
 
@@ -282,7 +299,7 @@ def current_identity(settings: Settings) -> AuthIdentity:
 def authorize_repository(settings: Settings, owner: str, repo: str, required_scopes: set[str]) -> AuthIdentity:
     identity = current_identity(settings)
     effective_scopes = set(required_scopes)
-    if settings.mcp_auth_mode == "oauth":
+    if settings.mcp_auth_mode != "static_bearer":
         effective_scopes.update(settings.oauth_required_scope_list)
     missing = sorted(effective_scopes - identity.scopes)
     if missing:
@@ -293,7 +310,7 @@ def authorize_repository(settings: Settings, owner: str, repo: str, required_sco
             suggestion="Authorize the Connected App again with the required scopes.",
             details={"required_scopes": sorted(effective_scopes), "missing_scopes": missing},
         )
-    if settings.mcp_auth_mode == "oauth" and settings.mcp_oauth_require_repo_claim:
+    if settings.mcp_auth_mode != "static_bearer" and settings.mcp_oauth_require_repo_claim:
         full_name = f"{owner}/{repo}".lower()
         if not identity.repositories:
             raise ApiError(
