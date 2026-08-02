@@ -1,0 +1,22 @@
+{$GATEWAY_HOSTNAME} {
+    encode zstd gzip
+
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Content-Type-Options "nosniff"
+        Referrer-Policy "no-referrer"
+        -Server
+    }
+
+    reverse_proxy gateway:8000 {
+        flush_interval -1
+        transport http {
+            read_buffer 0
+        }
+    }
+
+    log {
+        output stdout
+        format json
+    }
+}

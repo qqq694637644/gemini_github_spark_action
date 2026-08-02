@@ -1,0 +1,38 @@
+from __future__ import annotations
+
+MCP_TOOL_NAMES = frozenset(
+    {
+        "prepareWorkspace",
+        "workspaceCommandStart",
+        "workspaceCommandGet",
+        "workspaceCommandLogs",
+        "workspaceCommandCancel",
+        "workspaceCommandList",
+        "workspaceInspect",
+        "workspaceSearch",
+        "workspaceReadFiles",
+        "workspaceStatus",
+        "workspaceDiff",
+        "workspaceApplyPatch",
+        "workspaceWriteFile",
+        "workspaceCommitAndPush",
+        "createPullRequest",
+        "getPullRequest",
+        "listPullRequests",
+        "getPullRequestFiles",
+        "updatePullRequest",
+        "mergePullRequest",
+        "commentPullRequest",
+        "queryCiStatus",
+        "dispatchWorkflow",
+        "queryFailedCiLog",
+        "getCiRun",
+        "rerunWorkflowRun",
+        "getCiJobs",
+        "rerunWorkflowJob",
+        "getJobLog",
+        "getRunLog",
+        "listArtifacts",
+        "syncRunArtifactsToWorkspace",
+    }
+)
